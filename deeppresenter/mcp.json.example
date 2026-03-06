@@ -1,0 +1,86 @@
+[
+    {
+        "name": "any2markdown",
+        "description": "File conversion tools",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/any2markdown.py",
+            "$WORKSPACE"
+        ],
+        "env": {
+            "MINERU_API_KEY": "your_mineru_api_key_here"
+        }
+    },
+    {
+        "name": "task",
+        "description": "Task management tools",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/task.py",
+            "$WORKSPACE"
+        ],
+        "env": {
+            "CONFIG_FILE": "$CONFIG_FILE"
+        }
+    },
+    {
+        "name": "deeppresenter",
+        "description": "Artifact inspection tools for deeppresenter",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/reflect.py",
+            "$WORKSPACE"
+        ],
+        "env": {
+            "CONFIG_FILE": "$CONFIG_FILE"
+        }
+    },
+    {
+        "name": "tool_agents",
+        "description": "LLM-powered tool agents",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/tool_agents.py",
+            "$WORKSPACE"
+        ]
+    },
+    {
+        "name": "research",
+        "description": "Academic paper search tools",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/research.py",
+            "$WORKSPACE"
+        ]
+    },
+    {
+        "name": "search",
+        "description": "Web search tools",
+        "command": "python",
+        "args": [
+            "$PACKAGE_DIR/tools/search.py",
+            "$WORKSPACE"
+        ],
+        "env": {
+            "TAVILY_API_KEY": "your_tavily_api_key_here"
+        }
+    },
+    {
+        "name": "sandbox",
+        "description": "An agent sandbox developed on https://github.com/wonderwhy-er/DesktopCommanderMCP",
+        "command": "docker",
+        "args": [
+            "run",
+            "--init",
+            "--name",
+            "$WORKSPACE_ID",
+            "-i",
+            "--rm",
+            "-v",
+            "$HOST_WORKSPACE:$WORKSPACE",
+            "-w",
+            "$WORKSPACE",
+            "deeppresenter-sandbox:0.1.0"
+        ]
+    }
+]

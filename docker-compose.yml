@@ -1,0 +1,36 @@
+services:
+  build-sandbox:
+    build:
+      context: ./deeppresenter/docker
+      dockerfile: SandBox.Dockerfile
+      args:
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy: ${no_proxy:-}
+    image: deeppresenter-sandbox:0.1.0
+    profiles:
+      - build-only
+
+  deeppresenter-host:
+    build:
+      context: ./deeppresenter/docker
+      dockerfile: Host.Dockerfile
+      args:
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy: ${no_proxy:-}
+    image: deeppresenter-host:0.1.0
+    container_name: deeppresenter-host
+    ports:
+      - "7861:7861"
+    environment:
+      DEEPPRESENTER_HOST_WORKSPACE_BASE: ${PWD}/workspace
+      DEEPPRESENTER_WORKSPACE_BASE: /opt/workspace
+      DEEPPRESENTER_LOG_LEVEL: 0 # 0: debug, 10: info, 20: warning
+    volumes:
+      - ./workspace:/opt/workspace
+      - ./deeppresenter:/usr/src/pptagent/deeppresenter
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  deeppresenter_workspace:
