@@ -4,6 +4,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 import gradio as gr
 
@@ -13,6 +14,7 @@ from deeppresenter.utils.constants import WORKSPACE_BASE
 from deeppresenter.utils.log import create_logger
 from deeppresenter.utils.typings import ChatMessage, ConvertType, InputRequest, Role
 from pptagent import PPTAgentServer
+from pptagent.utils import ppt_to_images
 
 def resolve_webui_log_file() -> Path:
     """Resolve writable log file path for web UI process."""
@@ -68,57 +70,143 @@ def load_runtime_config() -> DeepPresenterConfig:
 
 
 gradio_css = """
-            .center-title {
-                text-align: center;
-                margin-bottom: 10px;
-            }
-            .center-subtitle {
-                text-align: center;
-                margin-bottom: 20px;
-                opacity: 0.8;
-            }
-            .token-display {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.6;
-                padding: 10px;
-            }
-            .token-display h2 {
-                color: #2c3e50;
-                font-size: 1.2em;
-                margin-bottom: 15px;
-            }
-            .gradio-container {
-                max-width: 100% !important;
-                overflow-x: hidden !important;
-            }
-            .file-container .wrap {
-                min-height: auto !important;
-                height: auto !important;
-            }
-
-            .file-container .upload-container {
-                display: none !important;  /* 隐藏大的拖拽区域 */
-            }
-
-            .file-container .file-list {
-                min-height: 40px !important;
-                padding: 8px !important;
-            }
-
-            footer {
-                display: none !important;
-            }
-
-            .gradio-container .footer {
-                display: none !important;
-            }
-            body {
-                margin: 5px !important;
-                padding: 0 !important;
-            }
-            .html-container {
-                padding: 0 !important;
-            }
+:root {
+    --dp-bg: #f3f7fb;
+    --dp-surface: #ffffff;
+    --dp-border: #d7e2ed;
+    --dp-text: #132436;
+    --dp-muted: #5a6a79;
+    --dp-primary: #0f7b6d;
+    --dp-primary-strong: #0b655a;
+    --dp-soft: #eaf8f4;
+}
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", "PingFang SC", sans-serif;
+    background:
+        radial-gradient(circle at 0% 0%, #dceefb 0%, transparent 42%),
+        radial-gradient(circle at 100% 0%, #e3f8ef 0%, transparent 35%),
+        var(--dp-bg);
+}
+.gradio-container {
+    max-width: 1680px !important;
+    padding: 12px 14px 18px !important;
+    color: var(--dp-text);
+}
+.center-title {
+    text-align: center;
+    margin: 4px 0 2px 0;
+}
+.center-title h1 {
+    margin: 0;
+    letter-spacing: 0.5px;
+}
+.center-subtitle {
+    text-align: center;
+    margin: 0 0 14px 0;
+    color: var(--dp-muted);
+    font-size: 0.95rem;
+}
+.main-layout {
+    gap: 14px;
+    align-items: stretch;
+}
+.panel-card {
+    background: var(--dp-surface);
+    border: 1px solid var(--dp-border);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(16, 42, 67, 0.07);
+    animation: rise-in 0.35s ease-out both;
+}
+.result-panel {
+    animation-delay: 0.08s;
+}
+.panel-title h3 {
+    margin: 0 0 10px 0;
+    color: var(--dp-text);
+}
+.chat-container {
+    border: 1px solid var(--dp-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.token-display {
+    line-height: 1.6;
+    padding: 6px 2px;
+}
+.compose-row {
+    align-items: end;
+    gap: 8px;
+}
+.send-btn button {
+    background: var(--dp-primary) !important;
+    border: none !important;
+}
+.send-btn button:hover {
+    background: var(--dp-primary-strong) !important;
+}
+.download-btn button {
+    border-color: var(--dp-border) !important;
+    background: var(--dp-soft) !important;
+    color: #0b514b !important;
+}
+.preview-status {
+    min-height: 42px;
+    padding: 8px 10px;
+    border: 1px solid var(--dp-border);
+    border-radius: 10px;
+    background: #f8fcff;
+}
+.preview-gallery {
+    border: 1px solid var(--dp-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.result-path textarea {
+    font-size: 12px !important;
+}
+.pdf-preview-shell {
+    width: 100%;
+    min-height: 560px;
+    border: 1px solid var(--dp-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+}
+.pdf-preview-shell iframe {
+    width: 100%;
+    min-height: 560px;
+    border: 0;
+    display: block;
+}
+footer,
+.gradio-container .footer {
+    display: none !important;
+}
+@keyframes rise-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@media (max-width: 980px) {
+    .gradio-container {
+        padding: 8px 8px 12px !important;
+    }
+    .panel-card {
+        padding: 12px;
+    }
+    .pdf-preview-shell,
+    .pdf-preview-shell iframe {
+        min-height: 420px;
+    }
+}
 """
 
 
@@ -146,23 +234,24 @@ class ChatDemo:
                 "# DeepPresenter",
                 elem_classes=["center-title"],
             )
+            gr.Markdown(
+                "生成完成后会在右侧自动显示预览，无需先下载即可查看。"
+                " 左侧用于输入与过程跟踪，右侧用于结果与预览。",
+                elem_classes=["center-subtitle"],
+            )
 
-            with gr.Row():
-                with gr.Column():
+            with gr.Row(elem_classes=["main-layout"]):
+                with gr.Column(scale=6, min_width=760, elem_classes=["panel-card"]):
+                    gr.Markdown("### 对话与配置", elem_classes=["panel-title"])
                     chatbot = gr.Chatbot(
                         value=[],
-                        height=300,
+                        height=480,
                         show_label=False,
                         type="messages",
                         render_markdown=True,
                         elem_classes=["chat-container"],
                     )
 
-                    with gr.Accordion("📊 Token 使用统计", open=False):
-                        token_display = gr.Markdown(
-                            value="暂无数据",
-                            elem_classes=["token-display"],
-                        )
                     with gr.Row():
                         pages_dd = gr.Dropdown(
                             label="幻灯片页数 (#pages)",
@@ -185,34 +274,81 @@ class ChatDemo:
                             visible=False,
                         )
 
-                    def _toggle_template_visibility(v: str):
-                        return gr.update(visible=("模版" in v))
-
-                    convert_type_dd.change(
-                        _toggle_template_visibility,
-                        inputs=[convert_type_dd],
-                        outputs=[template_dd],
-                    )
-
-                    with gr.Row():
-                        msg_input = gr.Textbox(
-                            placeholder="You instruction here",
-                            scale=4,
-                            container=False,
-                        )
-
-                        send_btn = gr.Button("发送", scale=1, variant="primary")
-                        download_btn = gr.DownloadButton(
-                            "📥 下载文件",
-                            scale=1,
-                            variant="secondary",
-                        )
-
                     attachments_input = gr.File(
+                        label="附件 (可多选)",
                         file_count="multiple",
                         type="filepath",
                         elem_classes=["file-container"],
                     )
+
+                    with gr.Row(elem_classes=["compose-row"]):
+                        msg_input = gr.Textbox(
+                            label="指令",
+                            placeholder="例如：生成一份 8 页的项目路演 PPT，突出问题、方案、商业模式和财务预测",
+                            lines=3,
+                            max_lines=6,
+                            scale=5,
+                        )
+                        send_btn = gr.Button(
+                            "生成并预览",
+                            scale=1,
+                            variant="primary",
+                            elem_classes=["send-btn"],
+                        )
+
+                    with gr.Accordion("📊 Token 使用统计", open=False):
+                        token_display = gr.Markdown(
+                            value="暂无数据",
+                            elem_classes=["token-display"],
+                        )
+
+                with gr.Column(
+                    scale=4,
+                    min_width=460,
+                    elem_classes=["panel-card", "result-panel"],
+                ):
+                    gr.Markdown("### 结果与预览", elem_classes=["panel-title"])
+                    preview_status = gr.Markdown(
+                        value="等待任务开始。生成完成后会自动显示预览。",
+                        elem_classes=["preview-status"],
+                    )
+                    result_file_display = gr.Textbox(
+                        label="生成文件路径",
+                        value="",
+                        placeholder="生成后自动填写",
+                        interactive=False,
+                        elem_classes=["result-path"],
+                    )
+                    download_btn = gr.DownloadButton(
+                        "📥 下载文件",
+                        variant="secondary",
+                        elem_classes=["download-btn"],
+                    )
+                    with gr.Tabs():
+                        with gr.Tab("幻灯片预览"):
+                            preview_gallery = gr.Gallery(
+                                value=[],
+                                label="PPT 页面预览",
+                                columns=1,
+                                height=560,
+                                object_fit="contain",
+                                visible=False,
+                                elem_classes=["preview-gallery"],
+                            )
+                        with gr.Tab("PDF预览"):
+                            pdf_preview_html = gr.HTML(
+                                value="",
+                                visible=False,
+                            )
+
+            def _toggle_template_visibility(v: str):
+                return gr.update(visible=("模版" in v))
+
+            convert_type_dd.change(
+                _toggle_template_visibility,
+                inputs=[convert_type_dd],
+                outputs=[template_dd],
+            )
 
             def collect_token_stats(loop: AgentLoop) -> str:
                 """收集所有 agents 的 token 统计并生成显示文本"""
@@ -275,6 +411,105 @@ class ChatDemo:
 
                 return "\n".join(token_lines) if total_all > 0 else "暂无 token 数据"
 
+            def build_pdf_preview_html(pdf_path: Path) -> str:
+                pdf_url = f"/gradio_api/file={quote(str(pdf_path))}"
+                return (
+                    '<div class="pdf-preview-shell">'
+                    f'<iframe src="{pdf_url}#toolbar=1&navpanes=0&scrollbar=1" '
+                    'title="Generated PDF Preview"></iframe>'
+                    "</div>"
+                )
+
+            async def prepare_preview_updates(
+                output_path: Path, workspace: Path
+            ) -> tuple[dict, dict, dict, dict]:
+                output_path = output_path.resolve()
+                result_file_update = gr.update(value=str(output_path))
+
+                if not output_path.exists():
+                    return (
+                        gr.update(value=f"⚠️ 文件不存在：`{output_path}`"),
+                        result_file_update,
+                        gr.update(value=[], visible=False),
+                        gr.update(value="", visible=False),
+                    )
+
+                suffix = output_path.suffix.lower()
+                if suffix == ".pdf":
+                    return (
+                        gr.update(value="✅ 已完成生成并加载 PDF 在线预览。"),
+                        result_file_update,
+                        gr.update(value=[], visible=False),
+                        gr.update(value=build_pdf_preview_html(output_path), visible=True),
+                    )
+
+                if suffix == ".pptx":
+                    try:
+                        preview_dir = (
+                            workspace
+                            / ".preview"
+                            / f"{output_path.stem}_{int(time.time() * 1000)}"
+                        )
+                        preview_dir.mkdir(parents=True, exist_ok=True)
+                        await ppt_to_images(
+                            str(output_path),
+                            str(preview_dir),
+                            dpi=120,
+                        )
+                        slide_images = sorted(preview_dir.glob("slide_*.jpg"))
+                        if not slide_images:
+                            raise RuntimeError("未生成可预览图片")
+
+                        gallery_items = [
+                            (str(img_path), f"第 {idx} 页")
+                            for idx, img_path in enumerate(slide_images, start=1)
+                        ]
+                        return (
+                            gr.update(
+                                value=f"✅ 已生成 {len(gallery_items)} 页在线预览，右侧可逐页查看。"
+                            ),
+                            result_file_update,
+                            gr.update(value=gallery_items, visible=True),
+                            gr.update(value="", visible=False),
+                        )
+                    except Exception as exc:
+                        fallback_pdf = output_path.with_suffix(".pdf")
+                        if fallback_pdf.exists():
+                            return (
+                                gr.update(
+                                    value=(
+                                        "⚠️ PPT 图片预览生成失败，已切换到 PDF 预览。"
+                                        f"\n\n错误信息：`{exc}`"
+                                    )
+                                ),
+                                result_file_update,
+                                gr.update(value=[], visible=False),
+                                gr.update(
+                                    value=build_pdf_preview_html(fallback_pdf),
+                                    visible=True,
+                                ),
+                            )
+                        logger.warning(
+                            f"Failed to build PPT preview for {output_path}: {exc}"
+                        )
+                        return (
+                            gr.update(
+                                value=f"⚠️ PPT 预览生成失败：`{exc}`。可先下载文件查看。"
+                            ),
+                            result_file_update,
+                            gr.update(value=[], visible=False),
+                            gr.update(value="", visible=False),
+                        )
+
+                return (
+                    gr.update(
+                        value=f"⚠️ 文件已生成（`{suffix or 'unknown'}`），暂不支持在线预览。"
+                    ),
+                    result_file_update,
+                    gr.update(value=[], visible=False),
+                    gr.update(value="", visible=False),
+                )
+
             async def send_message(
                 message,
                 history,
@@ -293,6 +528,10 @@ class ChatDemo:
                         history,
                         message,
                         gr.update(value=None),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
                         gr.update(),
                         gr.update(),
                     )
@@ -314,6 +553,18 @@ class ChatDemo:
                 if template_value == "auto":
                     template_value = None
 
+                yield (
+                    history,
+                    message,
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(value="⏳ 正在生成内容，请稍候..."),
+                    gr.update(value=""),
+                    gr.update(value=[], visible=False),
+                    gr.update(value="", visible=False),
+                )
+
                 async for yield_msg in loop.run(
                     InputRequest(
                         instruction=message or "请根据上传的附件制作 PPT",
@@ -324,7 +575,18 @@ class ChatDemo:
                     )
                 ):
                     if isinstance(yield_msg, (str, Path)):
-                        file_content = "📄 幻灯片生成完成，点击下方按钮下载文件"
+                        output_path = Path(yield_msg)
+                        if not output_path.is_absolute():
+                            output_path = loop.workspace / output_path
+
+                        (
+                            preview_status_update,
+                            result_file_update,
+                            preview_gallery_update,
+                            pdf_preview_update,
+                        ) = await prepare_preview_updates(output_path, loop.workspace)
+
+                        file_content = "📄 幻灯片生成完成，右侧可直接预览，并可按需下载文件。"
                         aggregated_parts.append(file_content)
                         aggregated_text = "\n\n".join(aggregated_parts).strip()
                         history[-1]["content"] = aggregated_text
@@ -335,8 +597,12 @@ class ChatDemo:
                             history,
                             "",
                             gr.update(value=None),
-                            gr.update(value=str(yield_msg)),
+                            gr.update(value=str(output_path)),
                             gr.update(value=token_text),
+                            preview_status_update,
+                            result_file_update,
+                            preview_gallery_update,
+                            pdf_preview_update,
                         )
 
                     elif isinstance(yield_msg, ChatMessage):
@@ -375,6 +641,10 @@ class ChatDemo:
                             gr.update(value=None),
                             gr.update(),
                             gr.update(value=token_text),
+                            gr.update(value="⏳ 正在生成内容，请稍候..."),
+                            gr.update(),
+                            gr.update(),
+                            gr.update(),
                         )
 
                     else:
@@ -398,6 +668,10 @@ class ChatDemo:
                     attachments_input,
                     download_btn,
                     token_display,
+                    preview_status,
+                    result_file_display,
+                    preview_gallery,
+                    pdf_preview_html,
                 ],
                 concurrency_limit=None,
             )
@@ -418,6 +692,10 @@ class ChatDemo:
                     attachments_input,
                     download_btn,
                     token_display,
+                    preview_status,
+                    result_file_display,
+                    preview_gallery,
+                    pdf_preview_html,
                 ],
                 concurrency_limit=None,
             )
