@@ -4,9 +4,11 @@ from math import ceil
 from os.path import exists
 from pathlib import Path
 from random import shuffle
+from copy import deepcopy
 
 from fastmcp import FastMCP
 from mistune import html as markdown_to_html
+import yaml
 
 from pptagent.llms import AsyncLLM
 from pptagent.multimodal import ImageLabler
@@ -62,19 +64,17 @@ class PPTAgentServer(PPTAgent):
         self.slides = []
         self.layout: Layout | None = None
         self.editor_output: EditorOutput | None = None
-        model = AsyncLLM(
-            os.getenv("PPTAGENT_MODEL"),
-            os.getenv("PPTAGENT_API_BASE"),
-            os.getenv("PPTAGENT_API_KEY"),
-        )
+        self.preview_pptx_path = Path(".preview") / "live_preview.pptx"
+        model_name, api_base, api_key = self._resolve_model_endpoint()
+        model = AsyncLLM(model_name, api_base, api_key)
         workspace = os.getenv("WORKSPACE", None)
         if workspace is not None:
             os.chdir(workspace)
 
         if not model.to_sync().test_connection():
-            msg = "Unable to connect to the model, please set the PPTAGENT_MODEL, PPTAGENT_API_BASE, and PPTAGENT_API_KEY environment variables correctly"
-            logger.error(msg)
-            raise Exception(msg)
+            logger.warning(
+                "PPTAgent model preflight check failed; continuing and will rely on runtime tool-call validation."
+            )
         super().__init__(language_model=model, vision_model=model)
 
         # load templates, a directory containing pptx, json, and description for each template
@@ -116,6 +116,47 @@ class PPTAgentServer(PPTAgent):
             f"{len(self.templates)} templates loaded successfully: "
             + ", ".join(self.templates.keys())
         )
+
+    @staticmethod
+    def _resolve_model_endpoint() -> tuple[str | None, str | None, str | None]:
+        """Resolve model endpoint from env first, then DeepPresenter config file."""
+        model_name = os.getenv("PPTAGENT_MODEL")
+        api_base = os.getenv("PPTAGENT_API_BASE")
+        api_key = os.getenv("PPTAGENT_API_KEY")
+        if model_name and api_base and api_key:
+            return model_name, api_base, api_key
+
+        config_file = os.getenv("CONFIG_FILE")
+        if not config_file:
+            return model_name, api_base, api_key
+
+        try:
+            cfg = yaml.safe_load(Path(config_file).read_text(encoding="utf-8")) or {}
+        except Exception as e:
+            logger.warning(f"Failed to load config file {config_file}: {e}")
+            return model_name, api_base, api_key
+
+        for section in ("research_agent", "design_agent", "long_context_model"):
+            endpoint = cfg.get(section) or {}
+            if (
+                endpoint.get("model")
+                and endpoint.get("base_url")
+                and endpoint.get("api_key")
+            ):
+                return (
+                    endpoint["model"],
+                    endpoint["base_url"],
+                    endpoint["api_key"],
+                )
+
+        return model_name, api_base, api_key
+
+    def _save_live_preview_snapshot(self) -> str:
+        """Save current generated slides as a live preview PPTX snapshot."""
+        self.preview_pptx_path.parent.mkdir(parents=True, exist_ok=True)
+        self.empty_prs.slides = self.slides
+        self.empty_prs.save(str(self.preview_pptx_path))
+        return str(self.preview_pptx_path.resolve())
 
     @classmethod
     def list_templates(cls) -> str:
@@ -172,7 +213,7 @@ class PPTAgentServer(PPTAgent):
 
             template_data = self.templates[template_name]
             self.set_reference(
-                slide_induction=template_data["slide_induction"],
+                slide_induction=deepcopy(template_data["slide_induction"]),
                 presentation=template_data["presentation"],
             )
 
@@ -277,12 +318,25 @@ class PPTAgentServer(PPTAgent):
             slide_number = len(self.slides)
             available_layouts = list(self.layouts.keys())
             shuffle(available_layouts)
+            preview_warning = None
+            preview_pptx_path = None
+            try:
+                preview_pptx_path = self._save_live_preview_snapshot()
+            except Exception as e:
+                preview_warning = f"Failed to save live preview snapshot: {e}"
+                logger.warning(preview_warning)
 
-            return {
+            result = {
                 "message": f"Slide {slide_number:02d} generated successfully",
+                "slide_number": slide_number,
                 "next_steps": "You can now save the slides or continue generating more slides",
                 "available_layouts": available_layouts,
             }
+            if preview_pptx_path:
+                result["preview_pptx_path"] = preview_pptx_path
+            if preview_warning:
+                result["preview_warning"] = preview_warning
+            return result
 
         @self.mcp.tool()
         async def save_generated_slides(pptx_path: str):
@@ -300,6 +354,8 @@ class PPTAgentServer(PPTAgent):
             self.empty_prs.save(pptx_path)
             self.slides = []
             self._initialized = False
+            if self.preview_pptx_path.exists():
+                self.preview_pptx_path.unlink()
             return f"total {len(self.empty_prs.slides)} slides saved to {pptx}"
 
 

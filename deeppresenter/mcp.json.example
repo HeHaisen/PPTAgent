@@ -82,5 +82,14 @@
             "$WORKSPACE",
             "deeppresenter-sandbox:0.1.0"
         ]
+    },
+    {
+        "name": "pptagent",
+        "description": "PPTAgent slide-by-slide generation tools",
+        "command": "python",
+        "args": [
+            "-m",
+            "pptagent.mcp_server"
+        ]
     }
 ]

@@ -1,4 +1,5 @@
 import json
+import shutil
 import traceback
 import uuid
 from collections.abc import AsyncGenerator
@@ -110,6 +111,14 @@ class AgentLoop:
                             pptx_file = Path(msg)
                             if not pptx_file.is_absolute():
                                 pptx_file = self.workspace / pptx_file
+                            if (
+                                pptx_file.name == "live_preview.pptx"
+                                and pptx_file.parent.name == ".preview"
+                                and pptx_file.exists()
+                            ):
+                                final_pptx = self.workspace / f"{md_file.stem}.pptx"
+                                shutil.copy2(pptx_file, final_pptx)
+                                pptx_file = final_pptx
                             self.intermediate_output["pptx"] = pptx_file
                             self.intermediate_output["final"] = pptx_file
                             msg = str(pptx_file)

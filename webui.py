@@ -1,9 +1,13 @@
 import os
+import socket
 import sys
 import time
 import uuid
+import json
+import asyncio
 from datetime import datetime
 from pathlib import Path
+from shutil import which
 from urllib.parse import quote
 
 import gradio as gr
@@ -13,6 +17,7 @@ from deeppresenter.utils.config import DeepPresenterConfig
 from deeppresenter.utils.constants import WORKSPACE_BASE
 from deeppresenter.utils.log import create_logger
 from deeppresenter.utils.typings import ChatMessage, ConvertType, InputRequest, Role
+from deeppresenter.utils.webview import PlaywrightConverter
 from pptagent import PPTAgentServer
 from pptagent.utils import ppt_to_images
 
@@ -42,6 +47,92 @@ CONVERT_MAPPING = {
     "自由生成 (freeform)": ConvertType.DEEPPRESENTER,
     "模版 (templates)": ConvertType.PPTAGENT,
 }
+
+MISSING_PPT_PREVIEW_DEP_MSG = "Neither unoconvert nor soffice is installed"
+LIVE_PREVIEW_PPTX_REL_PATH = Path(".preview") / "live_preview.pptx"
+
+
+def detect_ppt_preview_dependencies() -> dict[str, object]:
+    """Detect runtime dependencies for PPT image preview."""
+    unoconvert_path = which("unoconvert")
+    soffice_path = which("soffice")
+
+    unoserver_host = os.environ.get("UNOSERVER_URL", "127.0.0.1")
+    unoserver_port_raw = os.environ.get("UNOSERVER_PORT", "2003")
+    unoserver_reachable = False
+    unoserver_note = "未检查"
+
+    if unoconvert_path:
+        try:
+            unoserver_port = int(unoserver_port_raw)
+            with socket.create_connection(
+                (unoserver_host, unoserver_port), timeout=0.4
+            ) as conn:
+                conn.settimeout(0.4)
+            unoserver_reachable = True
+            unoserver_note = "可连接"
+        except ValueError:
+            unoserver_note = f"端口无效（UNOSERVER_PORT={unoserver_port_raw}）"
+        except OSError:
+            unoserver_note = "不可连接"
+
+    can_use_unoconvert = bool(unoconvert_path and unoserver_reachable)
+    can_ppt_image_preview = bool(soffice_path or can_use_unoconvert)
+
+    if can_ppt_image_preview:
+        failure_reason = ""
+    elif not unoconvert_path and not soffice_path:
+        failure_reason = "未检测到 `unoconvert` 和 `soffice`"
+    elif unoconvert_path and not soffice_path:
+        failure_reason = (
+            "检测到 `unoconvert`，但 `unoserver` 未就绪（"
+            f"{unoserver_host}:{unoserver_port_raw}）"
+        )
+    else:
+        failure_reason = "PPT 图片预览依赖未就绪"
+
+    return {
+        "unoconvert_path": unoconvert_path,
+        "soffice_path": soffice_path,
+        "unoserver_host": unoserver_host,
+        "unoserver_port": unoserver_port_raw,
+        "unoserver_reachable": unoserver_reachable,
+        "unoserver_note": unoserver_note,
+        "can_ppt_image_preview": can_ppt_image_preview,
+        "failure_reason": failure_reason,
+    }
+
+
+def render_ppt_preview_dependency_markdown() -> str:
+    """Build markdown for preview dependency self-check panel."""
+    dep = detect_ppt_preview_dependencies()
+
+    def mark(ok: bool) -> str:
+        return "✅" if ok else "❌"
+
+    lines = [
+        "当前环境状态（用于 PPT 图片预览）",
+        f"- {mark(bool(dep['soffice_path']))} `soffice`: "
+        f"`{dep['soffice_path'] or '未检测到'}`",
+        f"- {mark(bool(dep['unoconvert_path']))} `unoconvert`: "
+        f"`{dep['unoconvert_path'] or '未检测到'}`",
+    ]
+
+    if dep["unoconvert_path"]:
+        lines.append(
+            f"- {mark(bool(dep['unoserver_reachable']))} `unoserver` "
+            f"({dep['unoserver_host']}:{dep['unoserver_port']}): {dep['unoserver_note']}"
+        )
+
+    if dep["can_ppt_image_preview"]:
+        lines.append("- ✅ PPT 图片预览能力：可用")
+    else:
+        lines.append("- ⚠️ PPT 图片预览能力：不可用")
+        lines.append(
+            f"- 建议：{dep['failure_reason']}。优先安装 LibreOffice（提供 `soffice`）。"
+        )
+
+    return "\n".join(lines)
 
 
 def load_runtime_config() -> DeepPresenterConfig:
@@ -75,10 +166,13 @@ gradio_css = """
     --dp-surface: #ffffff;
     --dp-border: #d7e2ed;
     --dp-text: #132436;
-    --dp-muted: #5a6a79;
+    --dp-muted: #3f5266;
     --dp-primary: #0f7b6d;
     --dp-primary-strong: #0b655a;
     --dp-soft: #eaf8f4;
+    --dp-preview-height-desktop: 700px;
+    --dp-preview-height-mobile: 520px;
+    --dp-status-bg: #eef5ff;
 }
 body {
     margin: 0 !important;
@@ -157,19 +251,60 @@ body {
     padding: 8px 10px;
     border: 1px solid var(--dp-border);
     border-radius: 10px;
-    background: #f8fcff;
+    background: var(--dp-status-bg);
+    color: var(--dp-text);
+    font-weight: 500;
+}
+.preview-status p {
+    margin: 0;
+    color: var(--dp-text) !important;
+}
+.dep-check-panel {
+    margin-top: 8px;
+    border: 1px dashed #c8d8e8;
+    border-radius: 10px;
+    background: #f6fbff;
+    padding: 8px 10px;
+}
+.dep-check-panel p {
+    margin: 0;
+}
+.dep-refresh-btn button {
+    border-color: #c5d5e5 !important;
+    background: #edf4fb !important;
+    color: #17334d !important;
 }
 .preview-gallery {
     border: 1px solid var(--dp-border);
     border-radius: 12px;
     overflow: hidden;
+    min-height: var(--dp-preview-height-desktop);
 }
-.result-path textarea {
-    font-size: 12px !important;
+.preview-tabs [role="tablist"] {
+    background: #f4f8fc;
+    border: 1px solid var(--dp-border);
+    border-radius: 10px;
+    padding: 4px;
+}
+.preview-tabs button[role="tab"] {
+    color: #1f3850 !important;
+    background: #e8f0f8 !important;
+    border: 1px solid #cfdeec !important;
+    border-radius: 8px !important;
+    font-weight: 600;
+}
+.preview-tabs button[role="tab"][aria-selected="true"] {
+    color: #ffffff !important;
+    background: var(--dp-primary) !important;
+    border-color: var(--dp-primary-strong) !important;
+}
+.preview-tabs button[role="tab"]:hover {
+    color: #102a42 !important;
+    background: #dce9f6 !important;
 }
 .pdf-preview-shell {
     width: 100%;
-    min-height: 560px;
+    min-height: var(--dp-preview-height-desktop);
     border: 1px solid var(--dp-border);
     border-radius: 12px;
     overflow: hidden;
@@ -177,7 +312,7 @@ body {
 }
 .pdf-preview-shell iframe {
     width: 100%;
-    min-height: 560px;
+    min-height: var(--dp-preview-height-desktop);
     border: 0;
     display: block;
 }
@@ -202,9 +337,12 @@ footer,
     .panel-card {
         padding: 12px;
     }
+    .preview-gallery {
+        min-height: var(--dp-preview-height-mobile);
+    }
     .pdf-preview-shell,
     .pdf-preview-shell iframe {
-        min-height: 420px;
+        min-height: var(--dp-preview-height-mobile);
     }
 }
 """
@@ -312,25 +450,18 @@ class ChatDemo:
                         value="等待任务开始。生成完成后会自动显示预览。",
                         elem_classes=["preview-status"],
                     )
-                    result_file_display = gr.Textbox(
-                        label="生成文件路径",
-                        value="",
-                        placeholder="生成后自动填写",
-                        interactive=False,
-                        elem_classes=["result-path"],
-                    )
                     download_btn = gr.DownloadButton(
                         "📥 下载文件",
                         variant="secondary",
                         elem_classes=["download-btn"],
                     )
-                    with gr.Tabs():
+                    with gr.Tabs(elem_classes=["preview-tabs"]):
                         with gr.Tab("幻灯片预览"):
                             preview_gallery = gr.Gallery(
                                 value=[],
                                 label="PPT 页面预览",
                                 columns=1,
-                                height=560,
+                                height=700,
                                 object_fit="contain",
                                 visible=False,
                                 elem_classes=["preview-gallery"],
@@ -422,14 +553,12 @@ class ChatDemo:
 
             async def prepare_preview_updates(
                 output_path: Path, workspace: Path
-            ) -> tuple[dict, dict, dict, dict]:
+            ) -> tuple[dict, dict, dict]:
                 output_path = output_path.resolve()
-                result_file_update = gr.update(value=str(output_path))
 
                 if not output_path.exists():
                     return (
                         gr.update(value=f"⚠️ 文件不存在：`{output_path}`"),
-                        result_file_update,
                         gr.update(value=[], visible=False),
                         gr.update(value="", visible=False),
                     )
@@ -438,12 +567,41 @@ class ChatDemo:
                 if suffix == ".pdf":
                     return (
                         gr.update(value="✅ 已完成生成并加载 PDF 在线预览。"),
-                        result_file_update,
                         gr.update(value=[], visible=False),
                         gr.update(value=build_pdf_preview_html(output_path), visible=True),
                     )
 
                 if suffix == ".pptx":
+                    fallback_pdf = output_path.with_suffix(".pdf")
+                    dep_status = detect_ppt_preview_dependencies()
+                    if not dep_status["can_ppt_image_preview"]:
+                        if fallback_pdf.exists():
+                            return (
+                                gr.update(
+                                    value=(
+                                        "⚠️ "
+                                        f"{dep_status['failure_reason']}，"
+                                        "幻灯片图片预览不可用，已自动切换到 PDF 预览。"
+                                    )
+                                ),
+                                gr.update(value=[], visible=False),
+                                gr.update(
+                                    value=build_pdf_preview_html(fallback_pdf),
+                                    visible=True,
+                                ),
+                            )
+                        return (
+                            gr.update(
+                                value=(
+                                    "⚠️ "
+                                    f"{dep_status['failure_reason']}。"
+                                    "请安装 LibreOffice（提供 `soffice`）或启用 unoserver。"
+                                )
+                            ),
+                            gr.update(value=[], visible=False),
+                            gr.update(value="", visible=False),
+                        )
+
                     try:
                         preview_dir = (
                             workspace
@@ -468,21 +626,29 @@ class ChatDemo:
                             gr.update(
                                 value=f"✅ 已生成 {len(gallery_items)} 页在线预览，右侧可逐页查看。"
                             ),
-                            result_file_update,
                             gr.update(value=gallery_items, visible=True),
                             gr.update(value="", visible=False),
                         )
                     except Exception as exc:
-                        fallback_pdf = output_path.with_suffix(".pdf")
+                        dep_status = detect_ppt_preview_dependencies()
+                        missing_dep = (
+                            MISSING_PPT_PREVIEW_DEP_MSG in str(exc)
+                            or (not dep_status["can_ppt_image_preview"])
+                        )
                         if fallback_pdf.exists():
                             return (
                                 gr.update(
                                     value=(
-                                        "⚠️ PPT 图片预览生成失败，已切换到 PDF 预览。"
-                                        f"\n\n错误信息：`{exc}`"
+                                        "⚠️ "
+                                        f"{dep_status['failure_reason']}，"
+                                        "幻灯片图片预览不可用，已切换到 PDF 预览。"
+                                        if missing_dep
+                                        else (
+                                            "⚠️ PPT 图片预览生成失败，已切换到 PDF 预览。"
+                                            f"\n\n错误信息：`{exc}`"
+                                        )
                                     )
                                 ),
-                                result_file_update,
                                 gr.update(value=[], visible=False),
                                 gr.update(
                                     value=build_pdf_preview_html(fallback_pdf),
@@ -494,9 +660,12 @@ class ChatDemo:
                         )
                         return (
                             gr.update(
-                                value=f"⚠️ PPT 预览生成失败：`{exc}`。可先下载文件查看。"
+                                value=(
+                                    f"⚠️ {dep_status['failure_reason']}，无法生成幻灯片图片预览。"
+                                    if missing_dep
+                                    else f"⚠️ PPT 预览生成失败：`{exc}`。可先下载文件查看。"
+                                )
                             ),
-                            result_file_update,
                             gr.update(value=[], visible=False),
                             gr.update(value="", visible=False),
                         )
@@ -505,10 +674,102 @@ class ChatDemo:
                     gr.update(
                         value=f"⚠️ 文件已生成（`{suffix or 'unknown'}`），暂不支持在线预览。"
                     ),
-                    result_file_update,
                     gr.update(value=[], visible=False),
                     gr.update(value="", visible=False),
                 )
+
+            def resolve_download_output_path(
+                output_path: Path, workspace: Path
+            ) -> Path:
+                """Prefer non-preview pptx as downloadable artifact."""
+                if (
+                    output_path.name == LIVE_PREVIEW_PPTX_REL_PATH.name
+                    and output_path.parent.name == LIVE_PREVIEW_PPTX_REL_PATH.parent.name
+                ):
+                    candidates = sorted(
+                        workspace.glob("*.pptx"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
+                    )
+                    if candidates:
+                        return candidates[0]
+                return output_path
+
+            def parse_tool_result_payload(tool_text: str) -> dict | None:
+                """Parse tool text result as JSON object when possible."""
+                if not tool_text:
+                    return None
+                raw = tool_text.strip()
+                if not raw:
+                    return None
+                try:
+                    parsed = json.loads(raw)
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    pass
+                start = raw.find("{")
+                end = raw.rfind("}")
+                if start == -1 or end <= start:
+                    return None
+                try:
+                    parsed = json.loads(raw[start : end + 1])
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    return None
+
+            async def prepare_freeform_preview_updates(
+                workspace: Path,
+            ) -> tuple[dict, dict, dict, int]:
+                """Build incremental preview from generated slide HTML files."""
+                slides_dir = workspace / "slides"
+                html_files = sorted(slides_dir.glob("slide_*.html"))
+                if not html_files:
+                    return (
+                        gr.update(),
+                        gr.update(),
+                        gr.update(),
+                        0,
+                    )
+
+                preview_root = workspace / ".preview" / "freeform_live"
+                preview_root.mkdir(parents=True, exist_ok=True)
+                live_pdf = preview_root / "slides_live.pdf"
+
+                try:
+                    async with PlaywrightConverter() as converter:
+                        image_dir = await converter.convert_to_pdf(
+                            html_files,
+                            live_pdf,
+                            aspect_ratio="16:9",
+                        )
+                    slide_images = sorted(image_dir.glob("slide_*.jpg"))
+                    if not slide_images:
+                        return (
+                            gr.update(),
+                            gr.update(),
+                            gr.update(),
+                            len(html_files),
+                        )
+                    gallery_items = [
+                        (str(img_path), f"第 {idx} 页")
+                        for idx, img_path in enumerate(slide_images, start=1)
+                    ]
+                    return (
+                        gr.update(
+                            value=f"✅ 已生成 {len(gallery_items)} 页在线预览（逐页更新中）。"
+                        ),
+                        gr.update(value=gallery_items, visible=True),
+                        gr.update(value="", visible=False),
+                        len(html_files),
+                    )
+                except Exception as exc:
+                    logger.warning(f"Failed to build freeform live preview: {exc}")
+                    return (
+                        gr.update(value=f"⚠️ 逐页预览刷新失败：`{exc}`"),
+                        gr.update(),
+                        gr.update(),
+                        len(html_files),
+                    )
 
             async def send_message(
                 message,
@@ -533,7 +794,6 @@ class ChatDemo:
                         gr.update(),
                         gr.update(),
                         gr.update(),
-                        gr.update(),
                     )
                     return
 
@@ -552,6 +812,8 @@ class ChatDemo:
                 )
                 if template_value == "auto":
                     template_value = None
+                last_live_preview_mtime: float | None = None
+                last_freeform_html_count = 0
 
                 yield (
                     history,
@@ -560,12 +822,11 @@ class ChatDemo:
                     gr.update(),
                     gr.update(),
                     gr.update(value="⏳ 正在生成内容，请稍候..."),
-                    gr.update(value=""),
                     gr.update(value=[], visible=False),
                     gr.update(value="", visible=False),
                 )
 
-                async for yield_msg in loop.run(
+                stream = loop.run(
                     InputRequest(
                         instruction=message or "请根据上传的附件制作 PPT",
                         template=template_value,
@@ -573,15 +834,81 @@ class ChatDemo:
                         num_pages=str(selected_num_pages),
                         convert_type=selected_convert_type,
                     )
-                ):
+                )
+                next_msg_task: asyncio.Task | None = None
+                while True:
+                    try:
+                        if next_msg_task is None:
+                            next_msg_task = asyncio.create_task(anext(stream))
+                        yield_msg = await asyncio.wait_for(
+                            asyncio.shield(next_msg_task), timeout=1.0
+                        )
+                        next_msg_task = None
+                    except asyncio.TimeoutError:
+                        preview_status_update = gr.update()
+                        preview_gallery_update = gr.update()
+                        pdf_preview_update = gr.update()
+                        changed = False
+                        if selected_convert_type == ConvertType.PPTAGENT:
+                            candidate_path = loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH
+                            if candidate_path.exists():
+                                current_mtime = candidate_path.stat().st_mtime
+                                if (
+                                    last_live_preview_mtime is None
+                                    or current_mtime > last_live_preview_mtime
+                                ):
+                                    (
+                                        preview_status_update,
+                                        preview_gallery_update,
+                                        pdf_preview_update,
+                                    ) = await prepare_preview_updates(
+                                        candidate_path, loop.workspace
+                                    )
+                                    last_live_preview_mtime = current_mtime
+                                    changed = True
+                        elif selected_convert_type == ConvertType.DEEPPRESENTER:
+                            slide_html_count = len(
+                                list((loop.workspace / "slides").glob("slide_*.html"))
+                            )
+                            if slide_html_count > last_freeform_html_count:
+                                (
+                                    preview_status_update,
+                                    preview_gallery_update,
+                                    pdf_preview_update,
+                                    last_freeform_html_count,
+                                ) = await prepare_freeform_preview_updates(loop.workspace)
+                                changed = True
+
+                        if changed:
+                            token_text = collect_token_stats(loop)
+                            yield (
+                                history,
+                                message,
+                                gr.update(value=None),
+                                gr.update(),
+                                gr.update(value=token_text),
+                                preview_status_update,
+                                preview_gallery_update,
+                                pdf_preview_update,
+                            )
+                        continue
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.CancelledError:
+                        if next_msg_task is not None and not next_msg_task.done():
+                            next_msg_task.cancel()
+                        raise
+
                     if isinstance(yield_msg, (str, Path)):
                         output_path = Path(yield_msg)
                         if not output_path.is_absolute():
                             output_path = loop.workspace / output_path
+                        download_output_path = resolve_download_output_path(
+                            output_path, loop.workspace
+                        )
 
                         (
                             preview_status_update,
-                            result_file_update,
                             preview_gallery_update,
                             pdf_preview_update,
                         ) = await prepare_preview_updates(output_path, loop.workspace)
@@ -597,15 +924,65 @@ class ChatDemo:
                             history,
                             "",
                             gr.update(value=None),
-                            gr.update(value=str(output_path)),
+                            gr.update(value=str(download_output_path)),
                             gr.update(value=token_text),
                             preview_status_update,
-                            result_file_update,
                             preview_gallery_update,
                             pdf_preview_update,
                         )
 
                     elif isinstance(yield_msg, ChatMessage):
+                        preview_status_update = gr.update(
+                            value="⏳ 正在生成内容，请稍候..."
+                        )
+                        preview_gallery_update = gr.update()
+                        pdf_preview_update = gr.update()
+                        if (
+                            selected_convert_type == ConvertType.PPTAGENT
+                            and yield_msg.role == Role.TOOL
+                            and not yield_msg.is_error
+                        ):
+                            payload = parse_tool_result_payload(yield_msg.text)
+                            preview_pptx_path = None
+                            if isinstance(payload, dict):
+                                preview_pptx_path = payload.get("preview_pptx_path")
+                            if not preview_pptx_path:
+                                preview_pptx_path = str(
+                                    (loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH)
+                                )
+                            candidate_path = Path(preview_pptx_path)
+                            if not candidate_path.is_absolute():
+                                candidate_path = loop.workspace / candidate_path
+                            if candidate_path.exists():
+                                current_mtime = candidate_path.stat().st_mtime
+                                if (
+                                    last_live_preview_mtime is None
+                                    or current_mtime > last_live_preview_mtime
+                                ):
+                                    (
+                                        preview_status_update,
+                                        preview_gallery_update,
+                                        pdf_preview_update,
+                                    ) = await prepare_preview_updates(
+                                        candidate_path, loop.workspace
+                                    )
+                                    last_live_preview_mtime = current_mtime
+                        elif (
+                            selected_convert_type == ConvertType.DEEPPRESENTER
+                            and yield_msg.role == Role.TOOL
+                            and not yield_msg.is_error
+                        ):
+                            slide_html_count = len(
+                                list((loop.workspace / "slides").glob("slide_*.html"))
+                            )
+                            if slide_html_count > last_freeform_html_count:
+                                (
+                                    preview_status_update,
+                                    preview_gallery_update,
+                                    pdf_preview_update,
+                                    last_freeform_html_count,
+                                ) = await prepare_freeform_preview_updates(loop.workspace)
+
                         role_msg = f"{ROLE_EMOJI[yield_msg.role]} **{str(yield_msg.role).title()} Message**"
                         if yield_msg.text:
                             aggregated_parts.append(role_msg)
@@ -641,10 +1018,9 @@ class ChatDemo:
                             gr.update(value=None),
                             gr.update(),
                             gr.update(value=token_text),
-                            gr.update(value="⏳ 正在生成内容，请稍候..."),
-                            gr.update(),
-                            gr.update(),
-                            gr.update(),
+                            preview_status_update,
+                            preview_gallery_update,
+                            pdf_preview_update,
                         )
 
                     else:
@@ -669,7 +1045,6 @@ class ChatDemo:
                     download_btn,
                     token_display,
                     preview_status,
-                    result_file_display,
                     preview_gallery,
                     pdf_preview_html,
                 ],
@@ -693,7 +1068,6 @@ class ChatDemo:
                     download_btn,
                     token_display,
                     preview_status,
-                    result_file_display,
                     preview_gallery,
                     pdf_preview_html,
                 ],
