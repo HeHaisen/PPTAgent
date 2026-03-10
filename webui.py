@@ -4,6 +4,7 @@ import sys
 import time
 import uuid
 import json
+import html
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -166,102 +167,377 @@ def load_runtime_config() -> DeepPresenterConfig:
 
 gradio_css = """
 :root {
-    --dp-bg: #f3f7fb;
-    --dp-surface: #ffffff;
-    --dp-border: #d7e2ed;
-    --dp-text: #132436;
-    --dp-muted: #3f5266;
-    --dp-primary: #0f7b6d;
-    --dp-primary-strong: #0b655a;
-    --dp-soft: #eaf8f4;
+    --dp-bg: #f3ede3;
+    --dp-surface: rgba(255, 252, 246, 0.92);
+    --dp-surface-strong: #fffdf8;
+    --dp-border: rgba(23, 42, 58, 0.12);
+    --dp-text: #162534;
+    --dp-muted: #5f6e7a;
+    --dp-primary: #0d6b62;
+    --dp-primary-strong: #0a554f;
+    --dp-soft: #e6f5f1;
+    --dp-soft-strong: #d8efe8;
+    --dp-ink-soft: #ebf0f4;
+    --dp-warm: #f6e6d3;
+    --dp-shadow: 0 20px 60px rgba(16, 33, 47, 0.10);
     --dp-preview-height-desktop: 700px;
     --dp-preview-height-mobile: 520px;
-    --dp-status-bg: #eef5ff;
+    --dp-status-bg: #eef4fb;
 }
 body {
     margin: 0 !important;
     padding: 0 !important;
     font-family: "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", "PingFang SC", sans-serif;
     background:
-        radial-gradient(circle at 0% 0%, #dceefb 0%, transparent 42%),
-        radial-gradient(circle at 100% 0%, #e3f8ef 0%, transparent 35%),
+        radial-gradient(circle at 0% 0%, rgba(184, 218, 240, 0.70) 0%, transparent 38%),
+        radial-gradient(circle at 100% 0%, rgba(228, 211, 178, 0.55) 0%, transparent 30%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.55), transparent 55%),
         var(--dp-bg);
 }
 .gradio-container {
     max-width: 1680px !important;
-    padding: 12px 14px 18px !important;
+    margin: 0 auto !important;
+    padding: 18px 18px 26px !important;
     color: var(--dp-text);
 }
-.center-title {
-    text-align: center;
-    margin: 4px 0 2px 0;
+.hero-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+    gap: 18px;
+    margin-bottom: 16px;
+    padding: 22px 24px;
+    border: 1px solid rgba(16, 33, 47, 0.10);
+    border-radius: 28px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(243, 248, 246, 0.88)),
+        linear-gradient(120deg, rgba(13, 107, 98, 0.06), rgba(23, 42, 58, 0.03));
+    box-shadow: var(--dp-shadow);
+    animation: rise-in 0.4s ease-out both;
+    overflow: visible !important;
 }
-.center-title h1 {
+.hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.hero-badge {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(13, 107, 98, 0.10);
+    color: var(--dp-primary-strong);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.hero-copy h1 {
     margin: 0;
-    letter-spacing: 0.5px;
+    font-size: clamp(2rem, 3vw, 3.1rem);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
 }
-.center-subtitle {
-    text-align: center;
-    margin: 0 0 14px 0;
+.hero-copy p {
+    margin: 0;
+    max-width: 720px;
     color: var(--dp-muted);
+    font-size: 1rem;
+    line-height: 1.7;
+}
+.hero-side {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+}
+.metric-pill {
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(13, 107, 98, 0.10);
+    background: rgba(255, 255, 255, 0.72);
+}
+.metric-pill strong,
+.metric-pill span {
+    display: block;
+}
+.metric-pill strong {
     font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.metric-pill span {
+    color: var(--dp-muted);
+    font-size: 0.92rem;
 }
 .main-layout {
-    gap: 14px;
+    gap: 18px;
     align-items: stretch;
+    justify-content: center;
+    overflow: visible !important;
 }
 .panel-card {
     background: var(--dp-surface);
     border: 1px solid var(--dp-border);
-    border-radius: 16px;
-    padding: 14px;
-    box-shadow: 0 10px 30px rgba(16, 42, 67, 0.07);
+    border-radius: 24px;
+    padding: 18px;
+    box-shadow: var(--dp-shadow);
+    backdrop-filter: blur(12px);
     animation: rise-in 0.35s ease-out both;
+    position: relative;
+    overflow: visible !important;
+}
+.input-panel {
+    animation-delay: 0.04s;
+    z-index: 3;
 }
 .result-panel {
     animation-delay: 0.08s;
+    position: sticky;
+    top: 12px;
+    align-self: start;
+    z-index: 1;
 }
-.panel-title h3 {
+.section-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 14px;
+}
+.section-heading h3 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+.section-kicker {
+    color: var(--dp-primary-strong);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.section-heading p {
+    margin: 0;
+    color: var(--dp-muted);
+    line-height: 1.6;
+}
+.panel-note {
+    margin: 0 0 14px 0;
+}
+.panel-note-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+.note-chip {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(232, 244, 239, 0.86));
+    border: 1px solid rgba(13, 107, 98, 0.10);
+}
+.note-chip strong,
+.note-chip span {
+    display: block;
+}
+.note-chip strong {
+    margin-bottom: 4px;
+    font-size: 0.92rem;
+}
+.note-chip span {
+    color: var(--dp-muted);
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+.control-shell,
+.composer-shell,
+.log-shell {
+    border: 1px solid var(--dp-border);
+    border-radius: 20px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.66);
+    margin-bottom: 14px;
+    position: relative;
+    overflow: visible !important;
+}
+.control-shell {
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.82), rgba(245, 248, 250, 0.72));
+}
+.composer-shell {
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.84), rgba(230, 245, 241, 0.62));
+}
+.subsection-title {
     margin: 0 0 10px 0;
-    color: var(--dp-text);
+}
+.subsection-title strong,
+.subsection-title span {
+    display: block;
+}
+.subsection-title strong {
+    font-size: 1rem;
+    margin-bottom: 4px;
+}
+.subsection-title span {
+    font-size: 0.88rem;
+    color: var(--dp-muted);
+    line-height: 1.5;
+}
+.field-grid {
+    gap: 10px;
+    overflow: visible !important;
+}
+.field-row-tight {
+    gap: 10px;
+    margin-top: 2px;
+    overflow: visible !important;
+}
+.gradio-container [data-testid="dropdown"] {
+    position: relative;
+    z-index: 40;
+}
+.gradio-container [data-testid="dropdown"] button,
+.gradio-container [data-testid="dropdown"] input,
+.gradio-container [data-testid="dropdown"] label {
+    pointer-events: auto !important;
+}
+.gradio-container [data-testid="dropdown"] ul,
+.gradio-container [data-testid="dropdown"] [role="listbox"] {
+    z-index: 60 !important;
+}
+.full-send-btn button {
+    min-height: 52px;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    background: linear-gradient(135deg, var(--dp-primary), #138779) !important;
+    border: none !important;
+    box-shadow: 0 14px 34px rgba(13, 107, 98, 0.22);
+}
+.full-send-btn button:hover {
+    background: linear-gradient(135deg, var(--dp-primary-strong), var(--dp-primary)) !important;
+}
+.chat-shell {
+    margin-bottom: 10px;
 }
 .chat-container {
     border: 1px solid var(--dp-border);
-    border-radius: 12px;
+    border-radius: 18px;
     overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.90), rgba(242, 247, 249, 0.88));
+}
+.chat-container {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
 .token-display {
     line-height: 1.6;
     padding: 6px 2px;
 }
-.compose-row {
-    align-items: end;
-    gap: 8px;
-}
-.send-btn button {
-    background: var(--dp-primary) !important;
-    border: none !important;
-}
-.send-btn button:hover {
-    background: var(--dp-primary-strong) !important;
-}
-.download-btn button {
-    border-color: var(--dp-border) !important;
-    background: var(--dp-soft) !important;
-    color: #0b514b !important;
-}
 .preview-status {
-    min-height: 42px;
-    padding: 8px 10px;
+    min-height: 72px;
+    padding: 14px 16px;
     border: 1px solid var(--dp-border);
-    border-radius: 10px;
+    border-radius: 18px;
     background: var(--dp-status-bg);
     color: var(--dp-text);
     font-weight: 500;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
 .preview-status p {
     margin: 0;
     color: var(--dp-text) !important;
+}
+.result-toolbar {
+    gap: 12px;
+    align-items: stretch;
+    margin-bottom: 14px;
+}
+.download-shell {
+    min-width: 0;
+}
+.download-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    min-height: 72px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(13, 107, 98, 0.12);
+    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(230, 245, 241, 0.84));
+}
+.download-card.is-empty {
+    border-style: dashed;
+    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(241, 246, 248, 0.85));
+}
+.download-copy {
+    min-width: 0;
+}
+.download-copy strong,
+.download-copy span,
+.download-copy p {
+    display: block;
+}
+.download-copy strong {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.download-copy p {
+    margin: 3px 0 0 0;
+    color: var(--dp-muted);
+    font-size: 0.86rem;
+}
+.download-kicker {
+    margin-bottom: 4px;
+    color: var(--dp-primary-strong);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.download-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.download-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 999px;
+    text-decoration: none !important;
+    font-weight: 700;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.download-link.primary {
+    background: var(--dp-primary);
+    color: #ffffff !important;
+    box-shadow: 0 12px 28px rgba(13, 107, 98, 0.18);
+}
+.download-link.primary:hover {
+    background: var(--dp-primary-strong);
+    transform: translateY(-1px);
+}
+.download-link.secondary {
+    border: 1px solid rgba(22, 37, 52, 0.12);
+    background: rgba(255, 255, 255, 0.70);
+    color: var(--dp-text) !important;
+}
+.download-link.secondary:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+}
+.download-link.disabled {
+    background: #e7edf2;
+    color: #768492 !important;
+    pointer-events: none;
 }
 .dep-check-panel {
     margin-top: 8px;
@@ -280,21 +556,22 @@ body {
 }
 .preview-gallery {
     border: 1px solid var(--dp-border);
-    border-radius: 12px;
+    border-radius: 18px;
     overflow: hidden;
     min-height: var(--dp-preview-height-desktop);
+    background: rgba(255, 255, 255, 0.76);
 }
 .preview-tabs [role="tablist"] {
-    background: #f4f8fc;
+    background: rgba(255, 255, 255, 0.72);
     border: 1px solid var(--dp-border);
-    border-radius: 10px;
-    padding: 4px;
+    border-radius: 14px;
+    padding: 5px;
 }
 .preview-tabs button[role="tab"] {
     color: #1f3850 !important;
-    background: #e8f0f8 !important;
+    background: rgba(232, 240, 248, 0.92) !important;
     border: 1px solid #cfdeec !important;
-    border-radius: 8px !important;
+    border-radius: 10px !important;
     font-weight: 600;
 }
 .preview-tabs button[role="tab"][aria-selected="true"] {
@@ -310,7 +587,7 @@ body {
     width: 100%;
     min-height: var(--dp-preview-height-desktop);
     border: 1px solid var(--dp-border);
-    border-radius: 12px;
+    border-radius: 18px;
     overflow: hidden;
     background: #fff;
 }
@@ -336,10 +613,31 @@ footer,
 }
 @media (max-width: 980px) {
     .gradio-container {
-        padding: 8px 8px 12px !important;
+        padding: 10px 10px 16px !important;
+    }
+    .hero-banner {
+        grid-template-columns: 1fr;
+        padding: 18px;
     }
     .panel-card {
         padding: 12px;
+    }
+    .panel-note-strip {
+        grid-template-columns: 1fr;
+    }
+    .result-panel {
+        position: static;
+    }
+    .result-toolbar,
+    .download-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .download-actions {
+        justify-content: stretch;
+    }
+    .download-link {
+        width: 100%;
     }
     .preview-gallery {
         min-height: var(--dp-preview-height-mobile);
@@ -367,82 +665,182 @@ class UserSession:
 class ChatDemo:
     def create_interface(self):
         """创建 Gradio 界面"""
+        def format_file_size(path: Path) -> str:
+            size = float(path.stat().st_size)
+            units = ["B", "KB", "MB", "GB"]
+            for unit in units:
+                if size < 1024 or unit == units[-1]:
+                    return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+                size /= 1024
+            return f"{int(path.stat().st_size)} B"
+
+        def build_download_card_html(output_path: Path | None = None) -> str:
+            if output_path is None or not output_path.exists():
+                return (
+                    '<div class="download-card is-empty">'
+                    '<div class="download-copy">'
+                    '<span class="download-kicker">Result</span>'
+                    '<strong>结果文件会在这里出现</strong>'
+                    '<p>生成完成后可直接下载 PPTX、PDF 或其他导出文件。</p>'
+                    "</div>"
+                    '<div class="download-actions">'
+                    '<span class="download-link disabled">等待生成</span>'
+                    "</div>"
+                    "</div>"
+                )
+
+            safe_name = html.escape(output_path.name)
+            file_url = f"/gradio_api/file={quote(str(output_path))}"
+            meta = f"{output_path.suffix.lower().lstrip('.') or 'file'} · {format_file_size(output_path)}"
+            safe_meta = html.escape(meta.upper())
+            return (
+                '<div class="download-card">'
+                '<div class="download-copy">'
+                '<span class="download-kicker">Result</span>'
+                f'<strong title="{safe_name}">{safe_name}</strong>'
+                f"<p>{safe_meta}</p>"
+                "</div>"
+                '<div class="download-actions">'
+                f'<a class="download-link primary" href="{file_url}" download="{safe_name}">下载文件</a>'
+                f'<a class="download-link secondary" href="{file_url}" target="_blank" rel="noopener noreferrer">打开文件</a>'
+                "</div>"
+                "</div>"
+            )
+
         with gr.Blocks(
             title="DeepPresenter",
             theme=gr.themes.Soft(),
             css=gradio_css,
         ) as demo:
-            gr.Markdown(
-                "# DeepPresenter",
-                elem_classes=["center-title"],
-            )
-            gr.Markdown(
-                "生成完成后会在右侧自动显示预览，无需先下载即可查看。"
-                " 左侧用于输入与过程跟踪，右侧用于结果与预览。",
-                elem_classes=["center-subtitle"],
+            gr.HTML(
+                """
+                <section class="hero-banner">
+                    <div class="hero-copy">
+                        <span class="hero-badge">DeepPresenter Studio</span>
+                        <h1>把素材整理成可交付的演示文稿</h1>
+                        <p>
+                            左侧聚焦需求、模板与附件，右侧持续显示结果、预览和下载入口。
+                            适合快速起稿，也适合在上传模板上直接编辑。
+                        </p>
+                    </div>
+                    <div class="hero-side">
+                        <div class="metric-pill">
+                            <strong>双工作模式</strong>
+                            <span>自由生成与模板直编可以按任务切换。</span>
+                        </div>
+                        <div class="metric-pill">
+                            <strong>渐进预览</strong>
+                            <span>生成中会自动刷新右侧预览，不必反复下载。</span>
+                        </div>
+                        <div class="metric-pill">
+                            <strong>稳定下载</strong>
+                            <span>结果区提供文件直链和打开入口，避免按钮失效。</span>
+                        </div>
+                    </div>
+                </section>
+                """
             )
 
             with gr.Row(elem_classes=["main-layout"]):
-                with gr.Column(scale=6, min_width=760, elem_classes=["panel-card"]):
-                    gr.Markdown("### 对话与配置", elem_classes=["panel-title"])
-                    chatbot = gr.Chatbot(
-                        value=[],
-                        height=480,
-                        show_label=False,
-                        type="messages",
-                        render_markdown=True,
-                        elem_classes=["chat-container"],
+                with gr.Column(
+                    scale=6,
+                    min_width=760,
+                    elem_classes=["panel-card", "input-panel"],
+                ):
+                    gr.HTML(
+                        """
+                        <div class="section-heading">
+                            <span class="section-kicker">Workspace</span>
+                            <h3>任务输入</h3>
+                            <p>先配置模式、页数和模板，再补充附件与目标描述。</p>
+                        </div>
+                        """,
+                    )
+                    gr.HTML(
+                        """
+                        <div class="panel-note">
+                            <div class="panel-note-strip">
+                                <div class="note-chip">
+                                    <strong>页数控制</strong>
+                                    <span>可指定固定页数，也可以让系统自动判断。</span>
+                                </div>
+                                <div class="note-chip">
+                                    <strong>模板工作流</strong>
+                                    <span>上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
+                                </div>
+                                <div class="note-chip">
+                                    <strong>附件材料</strong>
+                                    <span>PDF、文档和图片会被解析为内容素材参与生成。</span>
+                                </div>
+                            </div>
+                        </div>
+                        """,
                     )
 
-                    with gr.Row():
-                        pages_dd = gr.Dropdown(
-                            label="幻灯片页数 (#pages)",
-                            choices=["auto"] + [str(i) for i in range(1, 31)],
-                            value="auto",
-                            scale=1,
+                    with gr.Group(elem_classes=["control-shell"]):
+                        gr.HTML(
+                            """
+                            <div class="subsection-title">
+                                <strong>项目设定</strong>
+                                <span>定义生成模式、页数规模和模板来源。</span>
+                            </div>
+                            """
                         )
-                        convert_type_dd = gr.Dropdown(
-                            label="输出类型 (output type)",
-                            choices=list(CONVERT_MAPPING),
-                            value=list(CONVERT_MAPPING)[0],
-                            scale=1,
-                        )
-                        template_choices = PPTAgentServer.list_templates()
-                        template_dd = gr.Dropdown(
-                            label="选择模板 (template)",
-                            choices=template_choices + ["auto"],
-                            value="auto",
-                            scale=2,
+                        with gr.Row(elem_classes=["field-grid"]):
+                            pages_dd = gr.Dropdown(
+                                label="幻灯片页数 (#pages)",
+                                choices=["auto"] + [str(i) for i in range(1, 31)],
+                                value="auto",
+                                scale=1,
+                            )
+                            convert_type_dd = gr.Dropdown(
+                                label="输出类型 (output type)",
+                                choices=list(CONVERT_MAPPING),
+                                value=list(CONVERT_MAPPING)[0],
+                                scale=1,
+                            )
+                        with gr.Row(elem_classes=["field-row-tight"]):
+                            template_choices = PPTAgentServer.list_templates()
+                            template_dd = gr.Dropdown(
+                                label="选择模板 (template)",
+                                choices=template_choices + ["auto"],
+                                value="auto",
+                                scale=1,
+                                visible=False,
+                            )
+                        custom_template_input = gr.File(
+                            label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
+                            file_count="single",
+                            file_types=[".pptx"],
+                            type="filepath",
                             visible=False,
                         )
-                    custom_template_input = gr.File(
-                        label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
-                        file_count="single",
-                        file_types=[".pptx"],
-                        type="filepath",
-                        visible=False,
-                    )
+                        attachments_input = gr.File(
+                            label="附件 (可多选)",
+                            file_count="multiple",
+                            type="filepath",
+                            elem_classes=["file-container"],
+                        )
 
-                    attachments_input = gr.File(
-                        label="附件 (可多选)",
-                        file_count="multiple",
-                        type="filepath",
-                        elem_classes=["file-container"],
-                    )
-
-                    with gr.Row(elem_classes=["compose-row"]):
+                    with gr.Group(elem_classes=["composer-shell"]):
+                        gr.HTML(
+                            """
+                            <div class="subsection-title">
+                                <strong>需求描述</strong>
+                                <span>明确受众、目标和内容重点，生成质量会更稳定。</span>
+                            </div>
+                            """
+                        )
                         msg_input = gr.Textbox(
                             label="指令",
                             placeholder="例如：生成一份 8 页的项目路演 PPT，突出问题、方案、商业模式和财务预测",
-                            lines=3,
-                            max_lines=6,
-                            scale=5,
+                            lines=4,
+                            max_lines=8,
                         )
                         send_btn = gr.Button(
-                            "生成并预览",
-                            scale=1,
+                            "生成并刷新预览",
                             variant="primary",
-                            elem_classes=["send-btn"],
+                            elem_classes=["full-send-btn"],
                         )
 
                     with gr.Accordion("📊 Token 使用统计", open=False):
@@ -451,21 +849,49 @@ class ChatDemo:
                             elem_classes=["token-display"],
                         )
 
+                    with gr.Group(elem_classes=["log-shell"]):
+                        gr.HTML(
+                            """
+                            <div class="subsection-title chat-shell">
+                                <strong>执行轨迹</strong>
+                                <span>显示代理消息、工具调用和生成过程，便于排查问题。</span>
+                            </div>
+                            """
+                        )
+                        chatbot = gr.Chatbot(
+                            value=[],
+                            height=560,
+                            show_label=False,
+                            type="messages",
+                            render_markdown=True,
+                            elem_classes=["chat-container"],
+                        )
+
                 with gr.Column(
                     scale=4,
                     min_width=460,
                     elem_classes=["panel-card", "result-panel"],
                 ):
-                    gr.Markdown("### 结果与预览", elem_classes=["panel-title"])
-                    preview_status = gr.Markdown(
-                        value="等待任务开始。生成完成后会自动显示预览。",
-                        elem_classes=["preview-status"],
+                    gr.HTML(
+                        """
+                        <div class="section-heading">
+                            <span class="section-kicker">Output</span>
+                            <h3>结果与预览</h3>
+                            <p>生成完成后，这里会持续显示状态、预览和下载入口。</p>
+                        </div>
+                        """
                     )
-                    download_btn = gr.DownloadButton(
-                        "📥 下载文件",
-                        variant="secondary",
-                        elem_classes=["download-btn"],
-                    )
+                    with gr.Row(elem_classes=["result-toolbar"]):
+                        with gr.Column(scale=5, min_width=280):
+                            preview_status = gr.Markdown(
+                                value="等待任务开始。生成完成后会自动显示预览。",
+                                elem_classes=["preview-status"],
+                            )
+                        with gr.Column(scale=4, min_width=260):
+                            download_card_html = gr.HTML(
+                                value=build_download_card_html(),
+                                elem_classes=["download-shell"],
+                            )
                     with gr.Tabs(elem_classes=["preview-tabs"]):
                         with gr.Tab("幻灯片预览"):
                             preview_gallery = gr.Gallery(
@@ -802,7 +1228,7 @@ class ChatDemo:
                         history,
                         message,
                         gr.update(value=None),
-                        gr.update(),
+                        gr.update(value=build_download_card_html()),
                         gr.update(),
                         gr.update(),
                         gr.update(),
@@ -841,7 +1267,7 @@ class ChatDemo:
                             history,
                             message,
                             gr.update(value=None),
-                            gr.update(),
+                            gr.update(value=build_download_card_html()),
                             gr.update(value="暂无数据"),
                             gr.update(value="⚠️ 自定义模板处理失败。"),
                             gr.update(value=[], visible=False),
@@ -869,7 +1295,7 @@ class ChatDemo:
                     history,
                     message,
                     gr.update(),
-                    gr.update(),
+                    gr.update(value=build_download_card_html()),
                     gr.update(),
                     gr.update(value="⏳ 正在生成内容，请稍候..."),
                     gr.update(value=[], visible=False),
@@ -975,7 +1401,7 @@ class ChatDemo:
                             history,
                             "",
                             gr.update(value=None),
-                            gr.update(value=str(download_output_path)),
+                            gr.update(value=build_download_card_html(download_output_path)),
                             gr.update(value=token_text),
                             preview_status_update,
                             preview_gallery_update,
@@ -1094,7 +1520,7 @@ class ChatDemo:
                     chatbot,
                     msg_input,
                     attachments_input,
-                    download_btn,
+                    download_card_html,
                     token_display,
                     preview_status,
                     preview_gallery,
@@ -1118,7 +1544,7 @@ class ChatDemo:
                     chatbot,
                     msg_input,
                     attachments_input,
-                    download_btn,
+                    download_card_html,
                     token_display,
                     preview_status,
                     preview_gallery,
