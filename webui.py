@@ -19,6 +19,10 @@ from deeppresenter.utils.log import create_logger
 from deeppresenter.utils.typings import ChatMessage, ConvertType, InputRequest, Role
 from deeppresenter.utils.webview import PlaywrightConverter
 from pptagent import PPTAgentServer
+from pptagent.uploaded_template import (
+    TemplatePreparationError,
+    prepare_uploaded_template,
+)
 from pptagent.utils import ppt_to_images
 
 def resolve_webui_log_file() -> Path:
@@ -411,6 +415,13 @@ class ChatDemo:
                             scale=2,
                             visible=False,
                         )
+                    custom_template_input = gr.File(
+                        label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
+                        file_count="single",
+                        file_types=[".pptx"],
+                        type="filepath",
+                        visible=False,
+                    )
 
                     attachments_input = gr.File(
                         label="附件 (可多选)",
@@ -473,12 +484,13 @@ class ChatDemo:
                             )
 
             def _toggle_template_visibility(v: str):
-                return gr.update(visible=("模版" in v))
+                show_template = "模版" in v
+                return gr.update(visible=show_template), gr.update(visible=show_template)
 
             convert_type_dd.change(
                 _toggle_template_visibility,
                 inputs=[convert_type_dd],
-                outputs=[template_dd],
+                outputs=[template_dd, custom_template_input],
             )
 
             def collect_token_stats(loop: AgentLoop) -> str:
@@ -777,6 +789,7 @@ class ChatDemo:
                 attachments,
                 convert_type_value,
                 template_value,
+                custom_template_path,
                 num_pages_value,
                 request: gr.Request,
             ):
@@ -812,6 +825,43 @@ class ChatDemo:
                 )
                 if template_value == "auto":
                     template_value = None
+                extra_info: dict[str, object] = {}
+                if (
+                    selected_convert_type == ConvertType.PPTAGENT
+                    and custom_template_path
+                ):
+                    try:
+                        prepared_template = prepare_uploaded_template(
+                            custom_template_path,
+                            loop.workspace,
+                        )
+                    except TemplatePreparationError as exc:
+                        history[-1]["content"] = f"模板处理失败：{exc}"
+                        yield (
+                            history,
+                            message,
+                            gr.update(value=None),
+                            gr.update(),
+                            gr.update(value="暂无数据"),
+                            gr.update(value="⚠️ 自定义模板处理失败。"),
+                            gr.update(value=[], visible=False),
+                            gr.update(value="", visible=False),
+                        )
+                        return
+
+                    template_value = prepared_template.template_name
+                    aggregated_parts.append(f"已加载自定义模板：`{template_value}`")
+                    aggregated_parts.append(
+                        "将按上传 PPT 的原页顺序直接编辑，未暴露为可编辑布局的页面将保持原样。"
+                    )
+                    for warning_msg in prepared_template.warnings:
+                        aggregated_parts.append(f"[模板告警] {warning_msg}")
+                    extra_info = {
+                        "pptagent_direct_edit": True,
+                        "template_slide_count": prepared_template.total_slide_count,
+                        "editable_template_layout_names": prepared_template.editable_layout_names,
+                        "preserved_template_slide_indices": prepared_template.preserved_slide_indices,
+                    }
                 last_live_preview_mtime: float | None = None
                 last_freeform_html_count = 0
 
@@ -833,6 +883,7 @@ class ChatDemo:
                         attachments=attachments or [],
                         num_pages=str(selected_num_pages),
                         convert_type=selected_convert_type,
+                        extra_info=extra_info,
                     )
                 )
                 next_msg_task: asyncio.Task | None = None
@@ -1036,6 +1087,7 @@ class ChatDemo:
                     attachments_input,
                     convert_type_dd,
                     template_dd,
+                    custom_template_input,
                     pages_dd,
                 ],
                 outputs=[
@@ -1059,6 +1111,7 @@ class ChatDemo:
                     attachments_input,
                     convert_type_dd,
                     template_dd,
+                    custom_template_input,
                     pages_dd,
                 ],
                 outputs=[

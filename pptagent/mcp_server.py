@@ -1,14 +1,14 @@
 import json
 import os
+from copy import deepcopy
 from math import ceil
 from os.path import exists
 from pathlib import Path
 from random import shuffle
-from copy import deepcopy
 
 from fastmcp import FastMCP
-from mistune import html as markdown_to_html
 import yaml
+from mistune import html as markdown_to_html
 
 from pptagent.llms import AsyncLLM
 from pptagent.multimodal import ImageLabler
@@ -26,6 +26,7 @@ from pptagent.utils import (
     get_logger,
     package_join,
 )
+from pptagent.uploaded_template import load_prepared_template_presentation
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,25 @@ def mcp_slide_validate(editor_output: EditorOutput, layout: Layout, prs_lang: La
 
 class PPTAgentServer(PPTAgent):
     roles = ["coder"]
+    CUSTOM_TEMPLATE_PREFIX = "user/"
+
+    @classmethod
+    def _iter_template_dirs(cls) -> list[tuple[str, Path]]:
+        template_dirs: list[tuple[str, Path]] = []
+        builtin_dir = Path(package_join("templates"))
+        if builtin_dir.exists():
+            for template_dir in builtin_dir.iterdir():
+                if template_dir.is_dir():
+                    template_dirs.append((template_dir.name, template_dir))
+
+        workspace_uploaded = Path.cwd() / "uploaded_templates"
+        if workspace_uploaded.exists():
+            for template_dir in workspace_uploaded.iterdir():
+                if template_dir.is_dir():
+                    template_dirs.append(
+                        (f"{cls.CUSTOM_TEMPLATE_PREFIX}{template_dir.name}", template_dir)
+                    )
+        return template_dirs
 
     def __init__(self):
         self.source_doc = None
@@ -65,6 +85,10 @@ class PPTAgentServer(PPTAgent):
         self.layout: Layout | None = None
         self.editor_output: EditorOutput | None = None
         self.preview_pptx_path = Path(".preview") / "live_preview.pptx"
+        self.direct_edit_mode = False
+        self.direct_edit_layout_order: list[str] = []
+        self.direct_edit_next_layout_idx = 0
+        self.generated_slides_by_template_id: dict[int, object] = {}
         model_name, api_base, api_key = self._resolve_model_endpoint()
         model = AsyncLLM(model_name, api_base, api_key)
         workspace = os.getenv("WORKSPACE", None)
@@ -78,38 +102,38 @@ class PPTAgentServer(PPTAgent):
         super().__init__(language_model=model, vision_model=model)
 
         # load templates, a directory containing pptx, json, and description for each template
-        templates_dir = Path(package_join("templates"))
-        templates = [p for p in templates_dir.iterdir() if p.is_dir()]
         self.template_description = {}
         self.templates = {}
 
-        for template in templates:
+        for template_name, template_dir in self._iter_template_dirs():
             try:
-                desc_path = template / "description.txt"
-                self.template_description[template.name] = desc_path.read_text()
+                desc_path = template_dir / "description.txt"
+                if desc_path.exists():
+                    self.template_description[template_name] = desc_path.read_text()
+                else:
+                    self.template_description[template_name] = (
+                        f"Template loaded from {template_dir}"
+                    )
 
-                # Load template configuration
-                template_folder = template
-                prs_config = Config(str(template_folder))
-                prs = Presentation.from_file(
-                    str(template_folder / "source.pptx"), prs_config
-                )
+                prs, metadata = load_prepared_template_presentation(template_dir)
+                prs_config = Config(str(template_dir))
                 image_labler = ImageLabler(prs, prs_config)
-                image_stats_path = template_folder / "image_stats.json"
+                image_stats_path = template_dir / "image_stats.json"
                 image_labler.apply_stats(json.loads(image_stats_path.read_text()))
 
                 slide_induction = json.loads(
-                    (template_folder / "slide_induction.json").read_text()
+                    (template_dir / "slide_induction.json").read_text()
                 )
 
-                self.templates[template.name] = {
+                self.templates[template_name] = {
                     "presentation": prs,
                     "slide_induction": slide_induction,
                     "config": prs_config,
+                    "metadata": metadata,
                 }
 
             except Exception as e:
-                logger.warning(f"Failed to load template {template.name}: {e}")
+                logger.warning(f"Failed to load template {template_name}: {e}")
                 continue
 
         logger.info(
@@ -151,17 +175,35 @@ class PPTAgentServer(PPTAgent):
 
         return model_name, api_base, api_key
 
+    def _reset_generation_state(self) -> None:
+        self.slides = []
+        self.layout = None
+        self.editor_output = None
+        self.direct_edit_mode = False
+        self.direct_edit_layout_order = []
+        self.direct_edit_next_layout_idx = 0
+        self.generated_slides_by_template_id = {}
+
+    def _build_output_slides(self) -> list:
+        if not self.direct_edit_mode:
+            return list(self.slides)
+
+        merged_slides = deepcopy(self.presentation.slides)
+        for template_id, slide in self.generated_slides_by_template_id.items():
+            merged_slides[template_id - 1] = slide
+        return merged_slides
+
     def _save_live_preview_snapshot(self) -> str:
         """Save current generated slides as a live preview PPTX snapshot."""
         self.preview_pptx_path.parent.mkdir(parents=True, exist_ok=True)
-        self.empty_prs.slides = self.slides
-        self.empty_prs.save(str(self.preview_pptx_path))
+        preview_presentation = deepcopy(self.empty_prs)
+        preview_presentation.slides = self._build_output_slides()
+        preview_presentation.save(str(self.preview_pptx_path))
         return str(self.preview_pptx_path.resolve())
 
     @classmethod
-    def list_templates(cls) -> str:
-        templates_dir = Path(package_join("templates"))
-        return [p.name for p in templates_dir.iterdir() if p.is_dir()]
+    def list_templates(cls) -> list[str]:
+        return [name for name, _ in cls._iter_template_dirs()]
 
     def register_tools(self):
         @self.mcp.tool()
@@ -184,7 +226,7 @@ class PPTAgentServer(PPTAgent):
             return f"Markdown table converted to image and saved to {path}"
 
         @self.mcp.tool()
-        def list_templates() -> list[dict]:
+        def list_templates() -> dict:
             """List all available templates."""
             return {
                 "message": "Please choose one the following templates by calling `set_template`",
@@ -212,16 +254,48 @@ class PPTAgentServer(PPTAgent):
             )
 
             template_data = self.templates[template_name]
+            self._reset_generation_state()
+            self.direct_edit_mode = bool(
+                template_data.get("metadata", {}).get("direct_edit")
+            )
             self.set_reference(
                 slide_induction=deepcopy(template_data["slide_induction"]),
                 presentation=template_data["presentation"],
+                hide_small_pic_ratio=None if self.direct_edit_mode else 0.2,
             )
+            if self.direct_edit_mode:
+                ordered_layouts = sorted(
+                    self.layouts.values(),
+                    key=lambda item: item.template_id,
+                )
+                self.direct_edit_layout_order = [layout.title for layout in ordered_layouts]
+            metadata = template_data.get("metadata", {})
 
-            return {
+            response = {
                 "message": "Template set successfully, please select layout from given layouts later",
                 "template_description": self.template_description[template_name],
-                "available_layouts": list(self.layouts.keys()),
+                "available_layouts": (
+                    self.direct_edit_layout_order or list(self.layouts.keys())
+                ),
             }
+            if self.direct_edit_mode:
+                response.update(
+                    {
+                        "message": (
+                            "Uploaded template set successfully. "
+                            "This template will be edited in place. "
+                            "Use the available layouts exactly once and strictly in the listed order."
+                        ),
+                        "direct_edit_mode": True,
+                        "editable_slide_count": len(self.direct_edit_layout_order),
+                        "total_slide_count": metadata.get("total_slide_count"),
+                        "preserved_slide_indices": metadata.get(
+                            "preserved_slide_indices", []
+                        ),
+                    }
+                )
+
+            return response
 
         @self.mcp.tool()
         async def create_slide(layout: str):
@@ -239,6 +313,20 @@ class PPTAgentServer(PPTAgent):
             assert layout in self.layouts, (
                 "Given layout was not in available layouts: " + ", ".join(self.layouts)
             )
+            if self.direct_edit_mode:
+                if self.direct_edit_next_layout_idx >= len(self.direct_edit_layout_order):
+                    raise ValueError(
+                        "All editable uploaded-template pages have already been used. "
+                        "Please save the slides or stop generating new slides."
+                    )
+                expected_layout = self.direct_edit_layout_order[
+                    self.direct_edit_next_layout_idx
+                ]
+                if layout != expected_layout:
+                    raise ValueError(
+                        "Direct edit mode requires following the uploaded template order. "
+                        f"The next expected layout is `{expected_layout}`."
+                    )
             if self.layout is not None:
                 message = "Layout update from " + self.layout.title + " to " + layout
                 message += "\nDid you forget to call `generate_slide` after setting slide content?"
@@ -314,10 +402,22 @@ class PPTAgentServer(PPTAgent):
             self.layout = None
             self.editor_output = None
             self.slides.append(slide)
+            if self.direct_edit_mode:
+                if template_id in self.generated_slides_by_template_id:
+                    raise ValueError(
+                        f"Template page {template_id} has already been edited once in direct edit mode."
+                    )
+                self.generated_slides_by_template_id[template_id] = slide
+                self.direct_edit_next_layout_idx += 1
 
             slide_number = len(self.slides)
-            available_layouts = list(self.layouts.keys())
-            shuffle(available_layouts)
+            if self.direct_edit_mode:
+                available_layouts = self.direct_edit_layout_order[
+                    self.direct_edit_next_layout_idx :
+                ]
+            else:
+                available_layouts = list(self.layouts.keys())
+                shuffle(available_layouts)
             preview_warning = None
             preview_pptx_path = None
             try:
@@ -350,13 +450,15 @@ class PPTAgentServer(PPTAgent):
                 "No slides generated, please call `generate_slide` first"
             )
             pptx.parent.mkdir(parents=True, exist_ok=True)
-            self.empty_prs.slides = self.slides
-            self.empty_prs.save(pptx_path)
-            self.slides = []
+            output_presentation = deepcopy(self.empty_prs)
+            output_presentation.slides = self._build_output_slides()
+            output_presentation.save(pptx_path)
+            saved_slide_count = len(output_presentation.slides)
+            self._reset_generation_state()
             self._initialized = False
             if self.preview_pptx_path.exists():
                 self.preview_pptx_path.unlink()
-            return f"total {len(self.empty_prs.slides)} slides saved to {pptx}"
+            return f"total {saved_slide_count} slides saved to {pptx}"
 
 
 def main():

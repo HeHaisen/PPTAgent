@@ -3,6 +3,7 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -13,20 +14,47 @@ async def parse_pdf_offline(pdf_path: str, output_path: str, url: str) -> None:
     pdf_path_obj = Path(pdf_path)
 
     async with aiohttp.ClientSession() as session:
-        form = aiohttp.FormData()
-        form.add_field(
-            "pdf",
-            pdf_path_obj.read_bytes(),
-            filename=pdf_path_obj.name,
-            content_type="application/pdf",
-        )
-
-        async with session.post(url, data=form) as resp:
-            if resp.status != 200:
-                await _raise_parsedoc_error(resp)
-            content = await resp.read()
+        content = await _post_offline_parse_request(session, url, pdf_path_obj)
 
     _extract_zip_bytes(content, output_path)
+
+
+async def _post_offline_parse_request(
+    session: aiohttp.ClientSession, url: str, pdf_path_obj: Path
+) -> bytes:
+    attempt_errors: list[tuple[str, int, object]] = []
+
+    for attempt in _offline_parse_attempts():
+        request_url = (
+            _append_query_params(url, response_format_zip="true")
+            if attempt["zip_in_query"]
+            else url
+        )
+        form = aiohttp.FormData()
+        with pdf_path_obj.open("rb") as file_obj:
+            form.add_field(
+                attempt["field_name"],
+                file_obj,
+                filename=pdf_path_obj.name,
+                content_type="application/pdf",
+            )
+            if attempt["zip_in_form"]:
+                form.add_field("response_format_zip", "true")
+
+            async with session.post(request_url, data=form) as resp:
+                if resp.status == 200:
+                    content = await resp.read()
+                    if content[:2] != b"PK":
+                        raise RuntimeError(
+                            "MinerU local endpoint returned a non-zip payload. "
+                            "Please confirm the service supports response_format_zip."
+                        )
+                    return content
+                attempt_errors.append(
+                    (attempt["name"], resp.status, await _read_error_payload(resp))
+                )
+
+    raise RuntimeError(_format_offline_attempt_errors(attempt_errors))
 
 
 async def parse_pdf_online(
@@ -147,11 +175,69 @@ async def _download_and_extract(
 
 async def _raise_parsedoc_error(resp: aiohttp.ClientResponse) -> None:
     """Raise a RuntimeError with parsed error content."""
+    raise RuntimeError(await _read_error_payload(resp))
+
+
+async def _read_error_payload(resp: aiohttp.ClientResponse) -> object:
     try:
-        payload = await resp.json()
+        return await resp.json()
     except Exception:
-        payload = await resp.text()
-    raise RuntimeError(payload)
+        return await resp.text()
+
+
+def _append_query_params(url: str, **params: str) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update(params)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+    )
+
+
+def _offline_parse_attempts() -> list[dict[str, object]]:
+    return [
+        {
+            "name": "files + response_format_zip(form)",
+            "field_name": "files",
+            "zip_in_form": True,
+            "zip_in_query": False,
+        },
+        {
+            "name": "files + response_format_zip(query)",
+            "field_name": "files",
+            "zip_in_form": False,
+            "zip_in_query": True,
+        },
+        {
+            "name": "files only",
+            "field_name": "files",
+            "zip_in_form": False,
+            "zip_in_query": False,
+        },
+        {
+            "name": "files[] + response_format_zip(form)",
+            "field_name": "files[]",
+            "zip_in_form": True,
+            "zip_in_query": False,
+        },
+        {
+            "name": "pdf compat",
+            "field_name": "pdf",
+            "zip_in_form": False,
+            "zip_in_query": False,
+        },
+    ]
+
+
+def _format_offline_attempt_errors(attempt_errors: list[tuple[str, int, object]]) -> str:
+    details = "\n".join(
+        f"- {name}: HTTP {status}, payload={payload!r}"
+        for name, status, payload in attempt_errors
+    )
+    return (
+        "MinerU local endpoint rejected all tested upload variants.\n"
+        f"{details}"
+    )
 
 
 def _extract_zip_bytes(content: bytes, output_path: str) -> None:

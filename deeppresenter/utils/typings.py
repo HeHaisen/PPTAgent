@@ -224,6 +224,29 @@ class InputRequest(BaseModel):
             prompt.append("PPT Template: " + self.template)
         if self.num_pages is not None and self.num_pages not in self.instruction:
             prompt.append("Number of pages: " + self.num_pages)
+        if self.extra_info.get("pptagent_direct_edit"):
+            prompt.append(
+                "Uploaded PPT Direct Edit Mode: "
+                "edit directly on the uploaded PPT, keep the original deck structure, "
+                "follow the uploaded slide order, and preserve untouched pages as-is."
+            )
+            if self.extra_info.get("template_slide_count") is not None:
+                prompt.append(
+                    "Uploaded template total slides: "
+                    + str(self.extra_info["template_slide_count"])
+                )
+            layout_names = self.extra_info.get("editable_template_layout_names") or []
+            if layout_names:
+                prompt.append(
+                    "Editable uploaded template layouts in order: "
+                    + ", ".join(layout_names)
+                )
+            preserved_pages = self.extra_info.get("preserved_template_slide_indices") or []
+            if preserved_pages:
+                prompt.append(
+                    "Preserved uploaded template slide indices: "
+                    + ", ".join(str(page) for page in preserved_pages)
+                )
         return "\n".join(prompt)
 
     @property
