@@ -12,6 +12,7 @@ from shutil import which
 from urllib.parse import quote
 
 import gradio as gr
+from pdf2image import convert_from_path
 
 from deeppresenter.main import AgentLoop
 from deeppresenter.utils.config import DeepPresenterConfig
@@ -1221,45 +1222,66 @@ class ChatDemo:
                         0,
                     )
 
-                preview_root = workspace / ".preview" / "freeform_live"
-                preview_root.mkdir(parents=True, exist_ok=True)
-                live_pdf = preview_root / "slides_live.pdf"
+                page_cache_dir = workspace / ".preview" / "freeform_pages"
+                page_cache_dir.mkdir(parents=True, exist_ok=True)
 
-                try:
-                    async with PlaywrightConverter() as converter:
-                        image_dir = await converter.convert_to_pdf(
-                            html_files,
-                            live_pdf,
-                            aspect_ratio="16:9",
+                # Build cache key for each HTML file; find pages needing render
+                pages_to_render = []  # (html_file, cache_key)
+                page_cache_keys = []  # ordered cache keys for all pages
+                for html_file in html_files:
+                    stat = html_file.stat()
+                    cache_key = f"{html_file.stem}_{int(stat.st_mtime)}_{stat.st_size}"
+                    page_cache_keys.append(cache_key)
+                    cached_jpg = page_cache_dir / f"{cache_key}.jpg"
+                    if not cached_jpg.exists():
+                        pages_to_render.append((html_file, cache_key))
+
+                # Only render new/changed pages
+                if pages_to_render:
+                    try:
+                        async with PlaywrightConverter() as converter:
+                            for html_file, cache_key in pages_to_render:
+                                page_pdf = page_cache_dir / f"{cache_key}.pdf"
+                                await converter.convert_single_html(
+                                    html_file, page_pdf, aspect_ratio="16:9"
+                                )
+                                images = convert_from_path(str(page_pdf), dpi=100)
+                                if images:
+                                    images[0].save(
+                                        str(page_cache_dir / f"{cache_key}.jpg")
+                                    )
+                    except Exception as exc:
+                        logger.warning(
+                            f"Failed to render new HTML pages: {exc}"
                         )
-                    slide_images = sorted(image_dir.glob("slide_*.jpg"))
-                    if not slide_images:
-                        return (
-                            gr.update(),
-                            gr.update(),
-                            gr.update(),
-                            len(html_files),
-                        )
-                    gallery_items = [
-                        (str(img_path), f"第 {idx} 页")
-                        for idx, img_path in enumerate(slide_images, start=1)
-                    ]
+
+                # Collect all cached page images in order
+                slide_images = []
+                for cache_key in page_cache_keys:
+                    cached_jpg = page_cache_dir / f"{cache_key}.jpg"
+                    if cached_jpg.exists():
+                        slide_images.append(cached_jpg)
+
+                if not slide_images:
                     return (
-                        gr.update(
-                            value=f"✅ 已生成 {len(gallery_items)} 页在线预览（逐页更新中）。"
-                        ),
-                        gr.update(value=gallery_items, visible=True),
-                        gr.update(value="", visible=False),
-                        len(html_files),
-                    )
-                except Exception as exc:
-                    logger.warning(f"Failed to build freeform live preview: {exc}")
-                    return (
-                        gr.update(value=f"⚠️ 逐页预览刷新失败：`{exc}`"),
                         gr.update(),
                         gr.update(),
+                        gr.update(),
                         len(html_files),
                     )
+
+                gallery_items = [
+                    (str(img_path), f"第 {idx} 页")
+                    for idx, img_path in enumerate(slide_images, start=1)
+                ]
+                return (
+                    gr.update(
+                        value=f"✅ 已生成 {len(gallery_items)} 页在线预览（逐页更新中）。"
+                    ),
+                    gr.update(value=gallery_items, visible=True),
+                    gr.update(value="", visible=False),
+                    len(html_files),
+                )
 
             async def send_message(
                 message,

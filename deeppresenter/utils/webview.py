@@ -89,6 +89,27 @@ class PlaywrightConverter:
         if self.context:
             await self.context.close()
 
+    async def convert_single_html(
+        self,
+        html_file: str | Path,
+        output_pdf: Path | str,
+        aspect_ratio: Literal["16:9", "4:3", "A1", "A2", "A3", "A4"] = "16:9",
+    ) -> Path:
+        """Convert a single HTML file to a single-page PDF."""
+        if isinstance(output_pdf, str):
+            output_pdf = Path(output_pdf)
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+        page = await self.context.new_page()
+        try:
+            await page.goto(
+                Path(html_file).resolve().as_uri(), wait_until="networkidle"
+            )
+            await page.pdf(path=output_pdf, **PDF_OPTIONS, **ASPECT_RATIOS[aspect_ratio])
+        finally:
+            await page.close()
+        return output_pdf
+
     async def convert_to_pdf(
         self,
         html_files: list[str | Path],
