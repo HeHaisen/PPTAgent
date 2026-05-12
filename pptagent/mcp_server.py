@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from copy import deepcopy
@@ -224,10 +225,14 @@ class PPTAgentServer(PPTAgent):
         preview_presentation.save(str(self.preview_pptx_path))
         return str(self.preview_pptx_path.resolve())
 
-    async def _generate_single_slide(
+    async def _build_single_slide(
         self, layout: str, elements: list[dict]
-    ) -> dict:
-        """Internal: validate layout+elements and generate one slide."""
+    ) -> tuple:
+        """I/O-bound: validate, generate commands, and edit slide. No shared state mutation.
+
+        Returns:
+            tuple: (slide, template_id, warnings, layout_name)
+        """
         assert self._initialized, (
             "PPTAgent not initialized, please call `set_template` first"
         )
@@ -235,19 +240,6 @@ class PPTAgentServer(PPTAgent):
             f"Layout '{layout}' not in available layouts: "
             + ", ".join(self.layouts)
         )
-        if self.direct_edit_mode:
-            if self.direct_edit_next_layout_idx >= len(self.direct_edit_layout_order):
-                raise ValueError(
-                    "All editable uploaded-template pages have already been used."
-                )
-            expected_layout = self.direct_edit_layout_order[
-                self.direct_edit_next_layout_idx
-            ]
-            if layout != expected_layout:
-                raise ValueError(
-                    "Direct edit mode requires following the uploaded template order. "
-                    f"Expected `{expected_layout}`, got `{layout}`."
-                )
 
         layout_obj = self.layouts[layout]
         editor_output = EditorOutput(
@@ -266,6 +258,29 @@ class PPTAgentServer(PPTAgent):
             editor_output, layout_obj
         )
         slide, _ = await self._edit_slide(command_list, template_id)
+        return slide, template_id, warnings, layout
+
+    async def _generate_single_slide(
+        self, layout: str, elements: list[dict]
+    ) -> dict:
+        """Internal: validate, generate, and commit one slide to shared state."""
+        if self.direct_edit_mode:
+            if self.direct_edit_next_layout_idx >= len(self.direct_edit_layout_order):
+                raise ValueError(
+                    "All editable uploaded-template pages have already been used."
+                )
+            expected_layout = self.direct_edit_layout_order[
+                self.direct_edit_next_layout_idx
+            ]
+            if layout != expected_layout:
+                raise ValueError(
+                    "Direct edit mode requires following the uploaded template order. "
+                    f"Expected `{expected_layout}`, got `{layout}`."
+                )
+
+        slide, template_id, warnings, _ = await self._build_single_slide(
+            layout, elements
+        )
 
         self.slides.append(slide)
         if self.direct_edit_mode:
@@ -535,7 +550,8 @@ class PPTAgentServer(PPTAgent):
 
             This is more efficient than calling create_slide + write_slide +
             generate_slide for each page individually, as it reduces MCP
-            round-trips from 3N to 1.
+            round-trips from 3N to 1. In non-direct-edit mode, slides are
+            generated concurrently for faster throughput.
 
             Args:
                 slides: List of slide specifications, each containing:
@@ -548,18 +564,54 @@ class PPTAgentServer(PPTAgent):
             """
             results = []
             errors = []
-            for idx, slide_spec in enumerate(slides):
-                layout = slide_spec.get("layout")
-                elements = slide_spec.get("elements", [])
-                if not layout:
-                    errors.append(f"Slide {idx}: missing 'layout' field")
-                    continue
-                try:
-                    result = await self._generate_single_slide(layout, elements)
+
+            if self.direct_edit_mode:
+                # Sequential: layout order matters for direct edit mode
+                for idx, slide_spec in enumerate(slides):
+                    layout = slide_spec.get("layout")
+                    elements = slide_spec.get("elements", [])
+                    if not layout:
+                        errors.append(f"Slide {idx}: missing 'layout' field")
+                        continue
+                    try:
+                        result = await self._generate_single_slide(layout, elements)
+                        results.append(result)
+                    except Exception as e:
+                        errors.append(f"Slide {idx} (layout={layout}): {e}")
+                        logger.warning(f"Batch slide {idx} failed: {e}")
+            else:
+                # Concurrent: build all slides in parallel, then commit in order
+                valid_specs = []
+                for idx, slide_spec in enumerate(slides):
+                    layout = slide_spec.get("layout")
+                    elements = slide_spec.get("elements", [])
+                    if not layout:
+                        errors.append(f"Slide {idx}: missing 'layout' field")
+                        continue
+                    valid_specs.append((idx, layout, elements))
+
+                coros = [
+                    self._build_single_slide(layout, elements)
+                    for _, layout, elements in valid_specs
+                ]
+                gathered = await asyncio.gather(*coros, return_exceptions=True)
+
+                for (idx, layout, _), outcome in zip(valid_specs, gathered):
+                    if isinstance(outcome, Exception):
+                        errors.append(f"Slide {idx} (layout={layout}): {outcome}")
+                        logger.warning(f"Batch slide {idx} failed: {outcome}")
+                        continue
+                    slide, template_id, warnings, _ = outcome
+                    self.slides.append(slide)
+                    slide_number = len(self.slides)
+                    result = {
+                        "slide_number": slide_number,
+                        "layout": layout,
+                        "success": True,
+                    }
+                    if warnings:
+                        result["warnings"] = warnings
                     results.append(result)
-                except Exception as e:
-                    errors.append(f"Slide {idx} (layout={layout}): {e}")
-                    logger.warning(f"Batch slide {idx} failed: {e}")
 
             # Save a live preview snapshot after the batch
             preview_pptx_path = None
