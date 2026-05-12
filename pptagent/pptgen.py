@@ -193,6 +193,7 @@ class PPTGen(ABC):
                 item.indexes.append(section_idx)
             self.simple_outline += f"Slide {slide_idx + 1}: {item.purpose}\n"
         logger.debug(f"==========Outline Generated==========\n{self.simple_outline}")
+        self._check_image_distribution(self.outline)
 
         if max_at_once:
             semaphore = asyncio.Semaphore(max_at_once)
@@ -339,6 +340,24 @@ class PPTGen(ABC):
                 self.layouts[layout.title.replace(":image", ":text")] = (
                     self.layouts.pop(layout.title)
                 )
+
+    @staticmethod
+    def _check_image_distribution(outline: list[OutlineItem]):
+        """Log a warning if images are heavily concentrated on few slides."""
+        image_counts = [len(item.images) for item in outline if item.topic != "Functional"]
+        if not image_counts:
+            return
+        total_images = sum(image_counts)
+        if total_images == 0:
+            return
+        slides_with_images = sum(1 for c in image_counts if c > 0)
+        max_on_one = max(image_counts)
+        if max_on_one > 3 and slides_with_images <= len(image_counts) // 3:
+            logger.warning(
+                "Image distribution is uneven: %d images total, %d/%d slides have images, "
+                "max %d images on a single slide. Consider redistributing for better visual balance.",
+                total_images, slides_with_images, len(image_counts), max_on_one,
+            )
 
     def _collect_history(self, code_executor: CodeExecutor):
         """
