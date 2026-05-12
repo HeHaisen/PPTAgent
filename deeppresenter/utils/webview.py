@@ -60,6 +60,7 @@ class PlaywrightConverter:
     _playwright = None
     _browser = None
     _lock = asyncio.Lock()
+    _render_semaphore = asyncio.Semaphore(3)  # max 3 concurrent renders
 
     def __init__(self):
         self.context = None
@@ -100,15 +101,45 @@ class PlaywrightConverter:
             output_pdf = Path(output_pdf)
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-        page = await self.context.new_page()
-        try:
-            await page.goto(
-                Path(html_file).resolve().as_uri(), wait_until="networkidle"
-            )
-            await page.pdf(path=output_pdf, **PDF_OPTIONS, **ASPECT_RATIOS[aspect_ratio])
-        finally:
-            await page.close()
+        async with PlaywrightConverter._render_semaphore:
+            page = await self.context.new_page()
+            try:
+                await page.goto(
+                    Path(html_file).resolve().as_uri(), wait_until="networkidle"
+                )
+                await page.pdf(path=output_pdf, **PDF_OPTIONS, **ASPECT_RATIOS[aspect_ratio])
+            finally:
+                await page.close()
         return output_pdf
+
+    async def take_screenshot(
+        self,
+        html_file: str | Path,
+        output_jpg: Path | str,
+        aspect_ratio: Literal["16:9", "4:3", "A1", "A2", "A3", "A4"] = "16:9",
+        quality: int = 60,
+    ) -> Path:
+        """Take a lightweight screenshot of an HTML file (for live preview)."""
+        if isinstance(output_jpg, str):
+            output_jpg = Path(output_jpg)
+        output_jpg.parent.mkdir(parents=True, exist_ok=True)
+
+        dims = ASPECT_RATIOS[aspect_ratio]
+        width = int(dims["width"].replace("px", ""))
+        height = int(dims["height"].replace("px", ""))
+
+        async with PlaywrightConverter._render_semaphore:
+            page = await self.context.new_page(viewport={"width": width, "height": height})
+            try:
+                await page.goto(
+                    Path(html_file).resolve().as_uri(), wait_until="networkidle"
+                )
+                await page.screenshot(
+                    path=output_jpg, type="jpeg", quality=quality
+                )
+            finally:
+                await page.close()
+        return output_jpg
 
     async def convert_to_pdf(
         self,
@@ -123,29 +154,30 @@ class PlaywrightConverter:
         folder = output_pdf.parent / f".slide_images-pdf-{output_pdf.stem}"
         folder.mkdir(exist_ok=True, parents=True)
 
-        page = await self.context.new_page()
-        if error_sink is not None:
-            page.on(
-                "pageerror",
-                lambda exc: error_sink.append(f"Page error: {exc}"),
-            )
-            page.on(
-                "console",
-                lambda msg: (
-                    error_sink.append(f"Console error: {msg.text}")
-                    if msg.type == "error"
-                    else None
-                ),
-            )
-        try:
-            for html, pdf in zip(sorted(html_files), pdf_files):
-                await page.goto(Path(html).resolve().as_uri(), wait_until="networkidle")
-                await page.pdf(path=pdf, **PDF_OPTIONS, **ASPECT_RATIOS[aspect_ratio])
-        except Exception as e:
-            error(f"Failed to convert HTML to PDF: {e}")
-            raise e
-        finally:
-            await page.close()
+        async with PlaywrightConverter._render_semaphore:
+            page = await self.context.new_page()
+            if error_sink is not None:
+                page.on(
+                    "pageerror",
+                    lambda exc: error_sink.append(f"Page error: {exc}"),
+                )
+                page.on(
+                    "console",
+                    lambda msg: (
+                        error_sink.append(f"Console error: {msg.text}")
+                        if msg.type == "error"
+                        else None
+                    ),
+                )
+            try:
+                for html, pdf in zip(sorted(html_files), pdf_files):
+                    await page.goto(Path(html).resolve().as_uri(), wait_until="networkidle")
+                    await page.pdf(path=pdf, **PDF_OPTIONS, **ASPECT_RATIOS[aspect_ratio])
+            except Exception as e:
+                error(f"Failed to convert HTML to PDF: {e}")
+                raise e
+            finally:
+                await page.close()
 
         with PdfWriter() as merger:
             for pdf_file in pdf_files:
