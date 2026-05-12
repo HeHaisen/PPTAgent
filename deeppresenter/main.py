@@ -18,6 +18,16 @@ from deeppresenter.utils.webview import PlaywrightConverter, convert_html_to_ppt
 
 
 class AgentLoop:
+    SEARCH_DISABLED_TOOLS = [
+        "search_web",
+        "search_images",
+        "fetch_url",
+        "download_file",
+        "search_papers",
+        "get_paper_authors",
+        "get_scholar_details",
+    ]
+
     def __init__(
         self,
         config: DeepPresenterConfig,
@@ -38,6 +48,16 @@ class AgentLoop:
         )
         debug(f"Initialized AgentLoop with workspace={self.workspace}")
         debug(f"Config: {self.config.model_dump_json(indent=2)}")
+
+    def _apply_request_constraints(self, request: InputRequest):
+        if request.search_enabled:
+            return
+        if hasattr(self, "research_agent") and self.research_agent:
+            self.research_agent.exclude_runtime_tools(self.SEARCH_DISABLED_TOOLS)
+            debug(
+                "External search disabled for current request, removed tools: "
+                + ", ".join(self.SEARCH_DISABLED_TOOLS)
+            )
 
     @timer("DeepPresenter Loop")
     async def run(
@@ -76,6 +96,7 @@ class AgentLoop:
                 self.workspace,
                 self.language,
             )
+            self._apply_request_constraints(request)
             self.agent = self.research_agent
             try:
                 async for msg in self.research_agent.loop(request):

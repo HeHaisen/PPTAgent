@@ -454,6 +454,15 @@ class PPTAgentServer(PPTAgent):
             output_presentation.slides = self._build_output_slides()
             output_presentation.save(pptx_path)
             saved_slide_count = len(output_presentation.slides)
+            is_live_preview_snapshot = (
+                pptx.resolve() == self.preview_pptx_path.resolve()
+            )
+            if is_live_preview_snapshot:
+                return (
+                    "Live preview snapshot updated successfully. "
+                    f"Current preview contains {saved_slide_count} slides at {pptx.resolve()}. "
+                    "Generation state is preserved; continue creating remaining slides."
+                )
             self._reset_generation_state()
             self._initialized = False
             if self.preview_pptx_path.exists():

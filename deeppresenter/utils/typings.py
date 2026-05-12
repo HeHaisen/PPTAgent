@@ -187,6 +187,10 @@ class InputRequest(BaseModel):
     convert_type: ConvertType = ConvertType.DEEPPRESENTER
     extra_info: dict[str, Any] = {}
 
+    @property
+    def search_enabled(self) -> bool:
+        return bool(self.extra_info.get("enable_search", True))
+
     def copy_to_workspace(self, workspace: Path):
         """Copy attachments to workspace"""
         if not self.attachments:
@@ -215,6 +219,12 @@ class InputRequest(BaseModel):
             prompt.append("Number of pages: " + self.num_pages)
         if self.attachments:
             prompt.append("Attachments: " + ", ".join(self.attachments))
+        if not self.search_enabled:
+            prompt.append(
+                "External search is disabled. Do not use web search, academic search, "
+                "URL fetching, or online asset download. Use only the provided attachments "
+                "and local workspace materials."
+            )
         return "\n".join(prompt)
 
     @property

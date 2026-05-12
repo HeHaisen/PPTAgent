@@ -392,6 +392,43 @@ body {
     margin-top: 2px;
     overflow: visible !important;
 }
+.template-row {
+    position: relative;
+    z-index: 24;
+    overflow: visible !important;
+}
+.template-row > div {
+    overflow: visible !important;
+}
+.template-dropdown {
+    position: relative;
+    z-index: 80;
+    overflow: visible !important;
+}
+.template-dropdown [data-testid="dropdown"] {
+    z-index: 90 !important;
+}
+.template-dropdown [data-testid="dropdown"],
+.template-dropdown [data-testid="dropdown"] > div,
+.template-dropdown [data-testid="dropdown"] > div > div {
+    position: relative;
+    overflow: visible !important;
+}
+.template-dropdown ul,
+.template-dropdown [role="listbox"],
+.template-dropdown [data-testid="dropdown-options"] {
+    z-index: 120 !important;
+    pointer-events: auto !important;
+}
+.search-toggle-wrap {
+    margin-top: 8px;
+}
+.search-toggle-wrap .wrap {
+    border: 1px solid rgba(13, 107, 98, 0.12);
+    border-radius: 16px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(230, 245, 241, 0.70));
+}
 .gradio-container [data-testid="dropdown"] {
     position: relative;
     z-index: 40;
@@ -404,6 +441,10 @@ body {
 .gradio-container [data-testid="dropdown"] ul,
 .gradio-container [data-testid="dropdown"] [role="listbox"] {
     z-index: 60 !important;
+}
+.file-container {
+    position: relative;
+    z-index: 1;
 }
 .full-send-btn button {
     min-height: 52px;
@@ -799,15 +840,24 @@ class ChatDemo:
                                 value=list(CONVERT_MAPPING)[0],
                                 scale=1,
                             )
-                        with gr.Row(elem_classes=["field-row-tight"]):
+                        with gr.Row(
+                            elem_classes=["field-row-tight", "template-row"],
+                        ) as template_row:
                             template_choices = PPTAgentServer.list_templates()
-                            template_dd = gr.Dropdown(
+                            template_dd = gr.Radio(
                                 label="选择模板 (template)",
-                                choices=template_choices + ["auto"],
+                                choices=["auto"] + template_choices,
                                 value="auto",
-                                scale=1,
-                                visible=False,
+                                info="仅在模板模式下生效；自由生成模式下会忽略此项。",
+                                interactive=True,
+                                elem_classes=["template-dropdown"],
                             )
+                        enable_search_cb = gr.Checkbox(
+                            label="开启联网搜索",
+                            value=True,
+                            info="关闭后仅使用附件和本地工作区材料，不再调用网页、图片或论文搜索。",
+                            elem_classes=["search-toggle-wrap"],
+                        )
                         custom_template_input = gr.File(
                             label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
                             file_count="single",
@@ -911,12 +961,12 @@ class ChatDemo:
 
             def _toggle_template_visibility(v: str):
                 show_template = "模版" in v
-                return gr.update(visible=show_template), gr.update(visible=show_template)
+                return gr.update(visible=show_template)
 
             convert_type_dd.change(
                 _toggle_template_visibility,
                 inputs=[convert_type_dd],
-                outputs=[template_dd, custom_template_input],
+                outputs=[custom_template_input],
             )
 
             def collect_token_stats(loop: AgentLoop) -> str:
@@ -1217,6 +1267,7 @@ class ChatDemo:
                 template_value,
                 custom_template_path,
                 num_pages_value,
+                enable_search_value,
                 request: gr.Request,
             ):
                 user_session = UserSession()
@@ -1251,7 +1302,11 @@ class ChatDemo:
                 )
                 if template_value == "auto":
                     template_value = None
-                extra_info: dict[str, object] = {}
+                extra_info: dict[str, object] = {
+                    "enable_search": bool(enable_search_value),
+                }
+                if not enable_search_value:
+                    aggregated_parts.append("已关闭联网搜索，将仅基于附件和本地材料生成内容。")
                 if (
                     selected_convert_type == ConvertType.PPTAGENT
                     and custom_template_path
@@ -1282,12 +1337,12 @@ class ChatDemo:
                     )
                     for warning_msg in prepared_template.warnings:
                         aggregated_parts.append(f"[模板告警] {warning_msg}")
-                    extra_info = {
+                    extra_info.update({
                         "pptagent_direct_edit": True,
                         "template_slide_count": prepared_template.total_slide_count,
                         "editable_template_layout_names": prepared_template.editable_layout_names,
                         "preserved_template_slide_indices": prepared_template.preserved_slide_indices,
-                    }
+                    })
                 last_live_preview_mtime: float | None = None
                 last_freeform_html_count = 0
 
@@ -1515,6 +1570,7 @@ class ChatDemo:
                     template_dd,
                     custom_template_input,
                     pages_dd,
+                    enable_search_cb,
                 ],
                 outputs=[
                     chatbot,
@@ -1539,6 +1595,7 @@ class ChatDemo:
                     template_dd,
                     custom_template_input,
                     pages_dd,
+                    enable_search_cb,
                 ],
                 outputs=[
                     chatbot,

@@ -142,6 +142,16 @@ class Agent:
             if tool_name in toolset.include_tools:
                 self.tools.append(tool)
 
+    def exclude_runtime_tools(self, tool_names: list[str]):
+        if not tool_names:
+            return
+        blocked = set(tool_names)
+        self.tools = [
+            tool
+            for tool in self.tools
+            if tool["function"]["name"] not in blocked
+        ]
+
     async def chat(
         self,
         message: ChatMessage,

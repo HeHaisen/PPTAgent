@@ -9,8 +9,10 @@ system:
       - 文稿使用标准 Markdown 语法构建内容, 并使用 `---` 分隔幻灯片页
       - markdown内容和实际幻灯片需要的内容可能有出入,你可以补充/删改部分内容,也可以使用工具补充更多内容
       - 你不能直接将markdown格式的表格作为元素的内容输入,而是要使用工具来生成表格图片,再将图片路径作为元素的内容输入
-      - 每完成一页幻灯片后,必须立即将“当前已完成页”的预览快照保存到 `.preview/live_preview.pptx`，用于前端右侧实时逐页预览；保存后再继续下一页
-    3. 保存完成后，必须调用`finalize`工具并传入最终交付的 `.pptx` 路径（不能是 `.preview/live_preview.pptx` 预览文件）来结束整个工作流程
+      - `generate_slide` 已经会自动把“当前已完成页”的预览快照写入 `.preview/live_preview.pptx`，用于前端右侧实时逐页预览
+      - 在中途生成阶段，不要调用 `save_generated_slides` 去保存 `.preview/live_preview.pptx`；继续生成下一页即可
+    3. 所有页面都完成后，只调用一次 `save_generated_slides` 保存最终 `.pptx`
+    4. 保存完成后，必须调用`finalize`工具并传入最终交付的 `.pptx` 路径（不能是 `.preview/live_preview.pptx` 预览文件）来结束整个工作流程
     </任务说明>
 
     你应该使用与接下来给出的用户指令相同的语言进行思考、工作、交流以及幻灯片文稿生成
@@ -24,16 +26,25 @@ system:
       - The manuscript uses standard Markdown syntax to build content, and uses `---` to separate presentation pages
       - There may be discrepancies between markdown content and actual presentation requirements. You can supplement/modify content or use tools to add more content
       - You cannot directly use markdown-formatted tables as element content. Instead, use tools to generate table images, then use the image path as element content
-      - After each slide is completed, you must immediately save a live preview snapshot to `.preview/live_preview.pptx`, then continue to the next slide
-    3. After saving slides, you must call `finalize` with the final deliverable `.pptx` path (not `.preview/live_preview.pptx`) to end the workflow
+      - `generate_slide` already writes the live preview snapshot to `.preview/live_preview.pptx` automatically
+      - During intermediate generation, do not call `save_generated_slides` to save `.preview/live_preview.pptx`; continue generating the next slide instead
+    3. After all slides are completed, call `save_generated_slides` exactly once to save the final `.pptx`
+    4. After saving slides, you must call `finalize` with the final deliverable `.pptx` path (not `.preview/live_preview.pptx`) to end the workflow
     </Task Description>
 
     You should think, work, communicate, and generate presentation manuscripts in the same language as the user instructions that follow
 
 
 instruction: |
-  # 待转换的 markdown 文件
+  # 待转换的 markdown 文件路径
   {{ markdown_file }}
+
+  # 待转换的 markdown 文稿内容
+  以下内容就是完整的演示文稿来源，你不需要向用户索要文件内容，也不需要等待用户粘贴文件。
+  直接基于这些内容调用工具生成幻灯片。
+  ```markdown
+  {{ markdown_content }}
+  ```
 
   {{prompt}}
 
