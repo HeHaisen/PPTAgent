@@ -8,7 +8,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from random import shuffle
 
 from pptagent.agent import Agent
 from pptagent.apis import API_TYPES, CodeExecutor
@@ -453,7 +452,6 @@ class PPTAgent(PPTGen):
             slide_content += "\nImages:\n" + "\n".join(images)
             layouts = self.multimodal_layouts
 
-        shuffle(layouts)
         _, layout_selection = await self.staffs["layout_selector"](
             outline=self.simple_outline,
             slide_description=header,
