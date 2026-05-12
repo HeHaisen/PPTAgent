@@ -420,8 +420,9 @@ class PPTAgent(PPTGen):
                     slide_idx, outline_item
                 )
             try:
+                total_slides = len(self.outline)
                 command_list, template_id = await self._generate_content(
-                    layout, slide_content, header
+                    layout, slide_content, header, slide_idx, total_slides
                 )
                 slide, code_executor = await self._edit_slide(command_list, template_id)
             except Exception as e:
@@ -469,6 +470,8 @@ class PPTAgent(PPTGen):
         layout: Layout,
         slide_content: str,
         slide_description: str,
+        slide_idx: int = 0,
+        total_slides: int = 1,
     ) -> tuple[list, int]:
         """
         Asynchronously generate content for the slide.
@@ -481,6 +484,7 @@ class PPTAgent(PPTGen):
             slide_content=slide_content,
             schema=layout.content_schema,
             language=self.dst_lang.lid,
+            slide_position=f"slide {slide_idx + 1} of {total_slides}",
             response_format=EditorOutput.response_model(elements),
         )
         editor_output = EditorOutput(**editor_output)

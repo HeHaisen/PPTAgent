@@ -14,6 +14,11 @@ template: |
     - Rewrite the content to the language specified in the input, **while preserving ambiguous terms (such as names of entities and abbreviations) in their original language** for precision.
     - Strictly adhere to the character limits (`suggested_characters`) in the schema for each element.
 
+  3. Coherence and Flow
+    - This is {{slide_position}}. Ensure the content logically connects with the preceding and following slides as shown in the outline.
+    - Maintain consistent terminology, tone, and level of detail across the presentation.
+    - If this is the first content slide, provide an appropriate introduction; if it is the last, provide a conclusion or summary.
+
   Output Format:
   {
     "elements": [
@@ -55,5 +60,6 @@ jinja_args:
   - slide_content
   - schema
   - language
+  - slide_position
 use_model: language
 return_json: true
