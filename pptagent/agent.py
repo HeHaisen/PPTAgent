@@ -106,7 +106,7 @@ class Agent:
         """
         for turn in turns[:-1]:
             self.input_tokens += turn.input_chars
-            self.out_tokens += turn.output_chars
+            self.output_tokens += turn.output_chars
         self.input_tokens += turns[-1].input_chars
         self.output_tokens += turns[-1].output_chars
         self.input_tokens += self.system_tokens
