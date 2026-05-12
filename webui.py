@@ -1527,6 +1527,19 @@ class ChatDemo:
                                 preview_status_update, preview_gallery_update, pdf_preview_update = result
                             elif isinstance(result, tuple) and len(result) == 4:
                                 preview_status_update, preview_gallery_update, pdf_preview_update, _ = result
+                            # Embed latest slide image in chatbot
+                            if (
+                                isinstance(preview_gallery_update, gr.update)
+                                and hasattr(preview_gallery_update, "value")
+                                and preview_gallery_update.value
+                            ):
+                                latest_img = preview_gallery_update.value[-1][0]
+                                img_url = f"/gradio_api/file={quote(str(latest_img))}"
+                                img_markdown = f"![第 {len(preview_gallery_update.value)} 页]({img_url})"
+                                history[-1]["content"] = (
+                                    history[-1].get("content", "").rstrip()
+                                    + "\n\n" + img_markdown
+                                ).strip()
                             token_text = collect_token_stats(loop)
                             yield (
                                 history,
