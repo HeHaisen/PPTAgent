@@ -69,6 +69,8 @@ IMAGE_EXTENSIONS = [
 ]
 MINERU_API_URL = os.getenv("MINERU_API_URL", None)
 MINERU_API_KEY = os.getenv("MINERU_API_KEY", None)
+_MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
+_WARN_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 @mcp.tool()
@@ -82,6 +84,16 @@ async def convert_to_markdown(file_path: str, output_folder: str) -> dict:
         The converted results, with file saved to the specified path
     """
     assert os.path.exists(file_path), f"Error: file {file_path} does not exist"
+
+    # File size guard
+    file_size = os.path.getsize(file_path)
+    if file_size > _MAX_FILE_SIZE:
+        return {
+            "success": False,
+            "error": f"文件过大（{file_size / 1024 / 1024:.1f}MB），超过 {_MAX_FILE_SIZE / 1024 / 1024:.0f}MB 限制。请压缩后重试。",
+        }
+    if file_size > _WARN_FILE_SIZE:
+        warning(f"Large file ({file_size / 1024 / 1024:.1f}MB): {file_path}")
 
     # Check cache
     fhash = _file_hash(file_path)
