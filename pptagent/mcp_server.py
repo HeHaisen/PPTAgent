@@ -102,6 +102,7 @@ class PPTAgentServer(PPTAgent):
                 "PPTAgent model preflight check failed; continuing and will rely on runtime tool-call validation."
             )
         super().__init__(language_model=model, vision_model=model)
+        self._workspace = workspace
 
         # load templates, a directory containing pptx, json, and description for each template
         self.template_description = {}
@@ -176,6 +177,18 @@ class PPTAgentServer(PPTAgent):
                 )
 
         return model_name, api_base, api_key
+
+    def _ensure_session(self) -> None:
+        """Reset state if workspace changed (session isolation for persistent servers)."""
+        current_ws = os.getenv("WORKSPACE", None)
+        if current_ws and current_ws != self._workspace:
+            logger.info(
+                f"Workspace changed from {self._workspace} to {current_ws}, "
+                "resetting state for new session."
+            )
+            self._reset_generation_state()
+            self._workspace = current_ws
+            os.chdir(current_ws)
 
     def _reset_generation_state(self) -> None:
         self.slides = []
@@ -310,6 +323,7 @@ class PPTAgentServer(PPTAgent):
             Returns:
                 dict: Success message and list of available layouts
             """
+            self._ensure_session()
             assert template_name in self.templates, (
                 f"Template {template_name} not available, please choose from {', '.join(self.templates.keys())}"
             )
