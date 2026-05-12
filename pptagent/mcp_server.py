@@ -60,9 +60,17 @@ def mcp_slide_validate(editor_output: EditorOutput, layout: Layout, prs_lang: La
 class PPTAgentServer(PPTAgent):
     roles = ["coder"]
     CUSTOM_TEMPLATE_PREFIX = "user/"
+    _template_dirs_cache: list[tuple[str, Path]] | None = None
+    _template_dirs_cache_time: float = 0
 
     @classmethod
-    def _iter_template_dirs(cls) -> list[tuple[str, Path]]:
+    def _iter_template_dirs(cls, use_cache: bool = True) -> list[tuple[str, Path]]:
+        import time
+
+        now = time.time()
+        if use_cache and cls._template_dirs_cache is not None and now - cls._template_dirs_cache_time < 30:
+            return cls._template_dirs_cache
+
         template_dirs: list[tuple[str, Path]] = []
         builtin_dir = Path(package_join("templates"))
         if builtin_dir.exists():
@@ -77,6 +85,8 @@ class PPTAgentServer(PPTAgent):
                     template_dirs.append(
                         (f"{cls.CUSTOM_TEMPLATE_PREFIX}{template_dir.name}", template_dir)
                     )
+        cls._template_dirs_cache = template_dirs
+        cls._template_dirs_cache_time = now
         return template_dirs
 
     def __init__(self):
