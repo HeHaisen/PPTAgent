@@ -1713,84 +1713,80 @@ class ChatDemo:
                         extra_info=extra_info,
                     )
                 )
-                next_msg_task: asyncio.Task | None = None
+                next_msg_task: asyncio.Task | None = asyncio.create_task(anext(stream))
                 while True:
-                    try:
-                        if next_msg_task is None:
-                            next_msg_task = asyncio.create_task(anext(stream))
-                        yield_msg = await asyncio.wait_for(
-                            asyncio.shield(next_msg_task), timeout=1.0
-                        )
-                        next_msg_task = None
-                    except asyncio.TimeoutError:
-                        # Start background preview task if new content detected
-                        if selected_convert_type == ConvertType.PPTAGENT:
-                            candidate_path = loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH
-                            if candidate_path.exists():
-                                current_mtime = candidate_path.stat().st_mtime
-                                if (
-                                    last_live_preview_mtime is None
-                                    or current_mtime > last_live_preview_mtime
-                                ):
-                                    last_live_preview_mtime = current_mtime
-                                    _start_preview_task(
-                                        prepare_preview_updates(
-                                            candidate_path, loop.workspace
-                                        )
-                                    )
-                        elif selected_convert_type == ConvertType.DEEPPRESENTER:
-                            slide_html_count = len(
-                                list((loop.workspace / "slides").glob("slide_*.html"))
-                            )
-                            if slide_html_count > last_freeform_html_count:
-                                last_freeform_html_count = slide_html_count
-                                _start_preview_task(
-                                    prepare_freeform_preview_updates(loop.workspace)
-                                )
-
-                        # Collect completed preview result and yield
-                        result = _collect_preview_result()
-                        if result is not None:
-                            _last_preview_result = None
-                            preview_status_update = gr.update()
-                            preview_gallery_update = gr.update()
-                            pdf_preview_update = gr.update()
-                            if isinstance(result, tuple) and len(result) == 3:
-                                preview_status_update, preview_gallery_update, pdf_preview_update = result
-                            elif isinstance(result, tuple) and len(result) == 4:
-                                preview_status_update, preview_gallery_update, pdf_preview_update, _ = result
-                            # Embed latest slide image in chatbot
+                    # Check for preview updates (non-blocking)
+                    if selected_convert_type == ConvertType.PPTAGENT:
+                        candidate_path = loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH
+                        if candidate_path.exists():
+                            current_mtime = candidate_path.stat().st_mtime
                             if (
-                                hasattr(preview_gallery_update, "value")
-                                and preview_gallery_update.value
+                                last_live_preview_mtime is None
+                                or current_mtime > last_live_preview_mtime
                             ):
-                                latest_img = preview_gallery_update.value[-1][0]
-                                img_url = f"/gradio_api/file={quote(str(latest_img))}"
-                                img_markdown = f"![第 {len(preview_gallery_update.value)} 页]({img_url})"
-                                history[-1]["content"] = (
-                                    history[-1].get("content", "").rstrip()
-                                    + "\n\n" + img_markdown
-                                ).strip()
-                            token_text = collect_token_stats(loop)
-                            yield (
-                                history,
-                                message,
-                                gr.update(value=None),
-                                gr.update(),
-                                gr.update(value=token_text),
-                                preview_status_update,
-                                preview_gallery_update,
-                                pdf_preview_update,
-                                loop,
+                                last_live_preview_mtime = current_mtime
+                                _start_preview_task(
+                                    prepare_preview_updates(
+                                        candidate_path, loop.workspace
+                                    )
+                                )
+                    elif selected_convert_type == ConvertType.DEEPPRESENTER:
+                        slide_html_count = len(
+                            list((loop.workspace / "slides").glob("slide_*.html"))
+                        )
+                        if slide_html_count > last_freeform_html_count:
+                            last_freeform_html_count = slide_html_count
+                            _start_preview_task(
+                                prepare_freeform_preview_updates(loop.workspace)
                             )
+
+                    result = _collect_preview_result()
+                    if result is not None:
+                        _last_preview_result = None
+                        preview_status_update = gr.update()
+                        preview_gallery_update = gr.update()
+                        pdf_preview_update = gr.update()
+                        if isinstance(result, tuple) and len(result) == 3:
+                            preview_status_update, preview_gallery_update, pdf_preview_update = result
+                        elif isinstance(result, tuple) and len(result) == 4:
+                            preview_status_update, preview_gallery_update, pdf_preview_update, _ = result
+                        if (
+                            hasattr(preview_gallery_update, "value")
+                            and preview_gallery_update.value
+                        ):
+                            latest_img = preview_gallery_update.value[-1][0]
+                            img_url = f"/gradio_api/file={quote(str(latest_img))}"
+                            img_markdown = f"![第 {len(preview_gallery_update.value)} 页]({img_url})"
+                            history[-1]["content"] = (
+                                history[-1].get("content", "").rstrip()
+                                + "\n\n" + img_markdown
+                            ).strip()
+                        token_text = collect_token_stats(loop)
+                        yield (
+                            history,
+                            message,
+                            gr.update(value=None),
+                            gr.update(),
+                            gr.update(value=token_text),
+                            preview_status_update,
+                            preview_gallery_update,
+                            pdf_preview_update,
+                            loop,
+                        )
+
+                    # Wait for next agent message with timeout for preview checks
+                    done, _ = await asyncio.wait({next_msg_task}, timeout=1.0)
+                    if not done:
                         continue
+                    # Task completed — process result
+                    try:
+                        yield_msg = next_msg_task.result()
                     except StopAsyncIteration:
                         break
                     except asyncio.CancelledError:
-                        if next_msg_task is not None and not next_msg_task.done():
-                            next_msg_task.cancel()
                         _cancel_preview_task()
                         raise
+                    next_msg_task = asyncio.create_task(anext(stream))
 
                     if isinstance(yield_msg, (str, Path)):
                         output_path = Path(yield_msg)
