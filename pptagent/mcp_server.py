@@ -48,9 +48,21 @@ def mcp_slide_validate(editor_output: EditorOutput, layout: Layout, prs_lang: La
                 if not exists(editor_output[el.name].data[i]):
                     errors.append(f"Image {editor_output[el.name].data[i]} not found")
         else:
-            charater_counts = max([len(i) for i in editor_output[el.name].data])
+            data = editor_output[el.name].data
+            if not data or all(not s.strip() for s in data):
+                warnings.append(
+                    f"Element {el.name} has empty content, please provide meaningful text"
+                )
+                continue
+            charater_counts = max(len(i) for i in data)
             expected_length = ceil(layout[el.name].suggested_characters * length_factor)
-            if charater_counts - expected_length > 5:
+            min_length = max(1, ceil(expected_length * 0.3))
+            if charater_counts < min_length:
+                warnings.append(
+                    f"Element {el.name} has only {charater_counts} characters, "
+                    f"which is significantly shorter than the expected {expected_length}"
+                )
+            elif charater_counts - expected_length > 5:
                 warnings.append(
                     f"Element {el.name} has {charater_counts} characters, but the expected length is {expected_length}"
                 )
