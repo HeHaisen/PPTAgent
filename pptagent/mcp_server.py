@@ -104,44 +104,24 @@ class PPTAgentServer(PPTAgent):
         super().__init__(language_model=model, vision_model=model)
         self._workspace = workspace
 
-        # load templates, a directory containing pptx, json, and description for each template
+        # Lazy template loading: only read descriptions at startup
         self.template_description = {}
+        self._template_dirs: dict[str, Path] = {}
         self.templates = {}
 
         for template_name, template_dir in self._iter_template_dirs():
-            try:
-                desc_path = template_dir / "description.txt"
-                if desc_path.exists():
-                    self.template_description[template_name] = desc_path.read_text()
-                else:
-                    self.template_description[template_name] = (
-                        f"Template loaded from {template_dir}"
-                    )
-
-                prs, metadata = load_prepared_template_presentation(template_dir)
-                prs_config = Config(str(template_dir))
-                image_labler = ImageLabler(prs, prs_config)
-                image_stats_path = template_dir / "image_stats.json"
-                image_labler.apply_stats(json.loads(image_stats_path.read_text()))
-
-                slide_induction = json.loads(
-                    (template_dir / "slide_induction.json").read_text()
+            self._template_dirs[template_name] = template_dir
+            desc_path = template_dir / "description.txt"
+            if desc_path.exists():
+                self.template_description[template_name] = desc_path.read_text()
+            else:
+                self.template_description[template_name] = (
+                    f"Template loaded from {template_dir}"
                 )
 
-                self.templates[template_name] = {
-                    "presentation": prs,
-                    "slide_induction": slide_induction,
-                    "config": prs_config,
-                    "metadata": metadata,
-                }
-
-            except Exception as e:
-                logger.warning(f"Failed to load template {template_name}: {e}")
-                continue
-
         logger.info(
-            f"{len(self.templates)} templates loaded successfully: "
-            + ", ".join(self.templates.keys())
+            f"{len(self._template_dirs)} templates discovered: "
+            + ", ".join(self._template_dirs.keys())
         )
 
     @staticmethod
@@ -177,6 +157,33 @@ class PPTAgentServer(PPTAgent):
                 )
 
         return model_name, api_base, api_key
+
+    def _load_template(self, template_name: str) -> dict:
+        """Load full template data on demand (lazy loading)."""
+        if template_name in self.templates:
+            return self.templates[template_name]
+
+        template_dir = self._template_dirs.get(template_name)
+        if template_dir is None:
+            raise ValueError(f"Template '{template_name}' not found.")
+
+        prs, metadata = load_prepared_template_presentation(template_dir)
+        prs_config = Config(str(template_dir))
+        image_labler = ImageLabler(prs, prs_config)
+        image_stats_path = template_dir / "image_stats.json"
+        image_labler.apply_stats(json.loads(image_stats_path.read_text()))
+        slide_induction = json.loads(
+            (template_dir / "slide_induction.json").read_text()
+        )
+
+        self.templates[template_name] = {
+            "presentation": prs,
+            "slide_induction": slide_induction,
+            "config": prs_config,
+            "metadata": metadata,
+        }
+        logger.info(f"Template '{template_name}' loaded on demand.")
+        return self.templates[template_name]
 
     def _ensure_session(self) -> None:
         """Reset state if workspace changed (session isolation for persistent servers)."""
@@ -309,7 +316,7 @@ class PPTAgentServer(PPTAgent):
                         "name": template_name,
                         "description": self.template_description[template_name],
                     }
-                    for template_name in self.templates.keys()
+                    for template_name in self._template_dirs.keys()
                 ],
             }
 
@@ -324,11 +331,11 @@ class PPTAgentServer(PPTAgent):
                 dict: Success message and list of available layouts
             """
             self._ensure_session()
-            assert template_name in self.templates, (
-                f"Template {template_name} not available, please choose from {', '.join(self.templates.keys())}"
+            assert template_name in self._template_dirs, (
+                f"Template {template_name} not available, please choose from {', '.join(self._template_dirs.keys())}"
             )
 
-            template_data = self.templates[template_name]
+            template_data = self._load_template(template_name)
             self._reset_generation_state()
             self.direct_edit_mode = bool(
                 template_data.get("metadata", {}).get("direct_edit")
