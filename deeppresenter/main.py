@@ -42,12 +42,23 @@ class AgentLoop:
         self.workspace = workspace or WORKSPACE_BASE / session_id
         self.intermediate_output = {}
         self.agent = None
+        self._cancelled = False
         set_logger(
             f"deeppresenter-loop-{self.workspace.stem}",
             self.workspace / ".history" / "deeppresenter-loop.log",
         )
         debug(f"Initialized AgentLoop with workspace={self.workspace}")
         debug(f"Config: {self.config.model_dump_json(indent=2)}")
+
+    def cancel(self):
+        """Signal the loop to stop at the next yield point."""
+        self._cancelled = True
+        debug(f"AgentLoop.cancel() called for workspace={self.workspace}")
+
+    def _check_cancelled(self):
+        """Raise if cancellation was requested."""
+        if self._cancelled:
+            raise asyncio.CancelledError("Generation cancelled by user")
 
     def _apply_request_constraints(self, request: InputRequest):
         if request.search_enabled:
@@ -100,6 +111,7 @@ class AgentLoop:
             self.agent = self.research_agent
             try:
                 async for msg in self.research_agent.loop(request):
+                    self._check_cancelled()
                     if isinstance(msg, str):
                         md_file = Path(msg)
                         if not md_file.is_absolute():
@@ -128,6 +140,7 @@ class AgentLoop:
                 self.agent = self.pptagent
                 try:
                     async for msg in self.pptagent.loop(request, md_file):
+                        self._check_cancelled()
                         if isinstance(msg, str):
                             pptx_file = Path(msg)
                             if not pptx_file.is_absolute():
@@ -165,6 +178,7 @@ class AgentLoop:
                 self.agent = self.designagent
                 try:
                     async for msg in self.designagent.loop(request, md_file):
+                        self._check_cancelled()
                         if isinstance(msg, str):
                             slide_html_dir = Path(msg)
                             if not slide_html_dir.is_absolute():
