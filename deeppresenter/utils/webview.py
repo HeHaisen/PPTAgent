@@ -66,16 +66,34 @@ class PlaywrightConverter:
         self.context = None
         self.page = None
 
+    @classmethod
+    async def _ensure_browser(cls):
+        """Ensure browser is alive, restart if crashed."""
+        if cls._browser is not None:
+            try:
+                # Quick health check: create and close a context
+                ctx = await cls._browser.new_context()
+                await ctx.close()
+                return
+            except Exception:
+                debug("Playwright browser is dead, restarting...")
+                try:
+                    await cls._browser.close()
+                except Exception:
+                    pass
+                cls._browser = None
+
+        if cls._playwright is None:
+            cls._playwright = await async_playwright().start()
+        cls._browser = await cls._playwright.chromium.launch(
+            headless=True, args=LAUNCH_ARGS
+        )
+        debug("Playwright browser started")
+
     async def __aenter__(self):
         """Async context manager entry"""
         async with PlaywrightConverter._lock:
-            if PlaywrightConverter._browser is None:
-                PlaywrightConverter._playwright = await async_playwright().start()
-                PlaywrightConverter._browser = (
-                    await PlaywrightConverter._playwright.chromium.launch(
-                        headless=True, args=LAUNCH_ARGS
-                    )
-                )
+            await PlaywrightConverter._ensure_browser()
 
         self.context = await PlaywrightConverter._browser.new_context(
             user_agent=FAKE_UA.random,
@@ -88,7 +106,26 @@ class PlaywrightConverter:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit, only close context"""
         if self.context:
-            await self.context.close()
+            try:
+                await asyncio.wait_for(self.context.close(), timeout=10)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
+    @classmethod
+    async def shutdown(cls):
+        """Shutdown the browser and playwright (call on application exit)."""
+        if cls._browser is not None:
+            try:
+                await cls._browser.close()
+            except Exception:
+                pass
+            cls._browser = None
+        if cls._playwright is not None:
+            try:
+                await cls._playwright.stop()
+            except Exception:
+                pass
+            cls._playwright = None
 
     async def convert_single_html(
         self,

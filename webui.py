@@ -1799,6 +1799,7 @@ class ChatDemo:
 
 
 if __name__ == "__main__":
+    import atexit
     import warnings
 
     chat_demo = ChatDemo()
@@ -1816,6 +1817,12 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         serve_port = int(sys.argv[2])
     print(f"Please visit http://{serve_url}:{serve_port}")
+
+    def _cleanup_playwright():
+        asyncio.get_event_loop().run_until_complete(PlaywrightConverter.shutdown())
+
+    atexit.register(_cleanup_playwright)
+
     demo.launch(
         debug=True,
         server_name=serve_url,
