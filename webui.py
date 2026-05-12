@@ -1348,6 +1348,31 @@ class ChatDemo:
                 last_live_preview_mtime: float | None = None
                 last_freeform_html_count = 0
 
+                # Background preview task state
+                _preview_task: asyncio.Task | None = None
+                _last_preview_result: tuple | None = None
+
+                def _cancel_preview_task():
+                    nonlocal _preview_task
+                    if _preview_task is not None and not _preview_task.done():
+                        _preview_task.cancel()
+                    _preview_task = None
+
+                def _start_preview_task(coro):
+                    nonlocal _preview_task
+                    _cancel_preview_task()
+                    _preview_task = asyncio.create_task(coro)
+
+                def _collect_preview_result():
+                    nonlocal _preview_task, _last_preview_result
+                    if _preview_task is not None and _preview_task.done():
+                        try:
+                            _last_preview_result = _preview_task.result()
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                        _preview_task = None
+                    return _last_preview_result
+
                 yield (
                     history,
                     message,
@@ -1379,10 +1404,7 @@ class ChatDemo:
                         )
                         next_msg_task = None
                     except asyncio.TimeoutError:
-                        preview_status_update = gr.update()
-                        preview_gallery_update = gr.update()
-                        pdf_preview_update = gr.update()
-                        changed = False
+                        # Start background preview task if new content detected
                         if selected_convert_type == ConvertType.PPTAGENT:
                             candidate_path = loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH
                             if candidate_path.exists():
@@ -1391,29 +1413,33 @@ class ChatDemo:
                                     last_live_preview_mtime is None
                                     or current_mtime > last_live_preview_mtime
                                 ):
-                                    (
-                                        preview_status_update,
-                                        preview_gallery_update,
-                                        pdf_preview_update,
-                                    ) = await prepare_preview_updates(
-                                        candidate_path, loop.workspace
-                                    )
                                     last_live_preview_mtime = current_mtime
-                                    changed = True
+                                    _start_preview_task(
+                                        prepare_preview_updates(
+                                            candidate_path, loop.workspace
+                                        )
+                                    )
                         elif selected_convert_type == ConvertType.DEEPPRESENTER:
                             slide_html_count = len(
                                 list((loop.workspace / "slides").glob("slide_*.html"))
                             )
                             if slide_html_count > last_freeform_html_count:
-                                (
-                                    preview_status_update,
-                                    preview_gallery_update,
-                                    pdf_preview_update,
-                                    last_freeform_html_count,
-                                ) = await prepare_freeform_preview_updates(loop.workspace)
-                                changed = True
+                                last_freeform_html_count = slide_html_count
+                                _start_preview_task(
+                                    prepare_freeform_preview_updates(loop.workspace)
+                                )
 
-                        if changed:
+                        # Collect completed preview result and yield
+                        result = _collect_preview_result()
+                        if result is not None:
+                            _last_preview_result = None
+                            preview_status_update = gr.update()
+                            preview_gallery_update = gr.update()
+                            pdf_preview_update = gr.update()
+                            if isinstance(result, tuple) and len(result) == 3:
+                                preview_status_update, preview_gallery_update, pdf_preview_update = result
+                            elif isinstance(result, tuple) and len(result) == 4:
+                                preview_status_update, preview_gallery_update, pdf_preview_update, _ = result
                             token_text = collect_token_stats(loop)
                             yield (
                                 history,
@@ -1431,6 +1457,7 @@ class ChatDemo:
                     except asyncio.CancelledError:
                         if next_msg_task is not None and not next_msg_task.done():
                             next_msg_task.cancel()
+                        _cancel_preview_task()
                         raise
 
                     if isinstance(yield_msg, (str, Path)):
@@ -1441,6 +1468,7 @@ class ChatDemo:
                             output_path, loop.workspace
                         )
 
+                        _cancel_preview_task()
                         (
                             preview_status_update,
                             preview_gallery_update,
@@ -1493,14 +1521,12 @@ class ChatDemo:
                                     last_live_preview_mtime is None
                                     or current_mtime > last_live_preview_mtime
                                 ):
-                                    (
-                                        preview_status_update,
-                                        preview_gallery_update,
-                                        pdf_preview_update,
-                                    ) = await prepare_preview_updates(
-                                        candidate_path, loop.workspace
-                                    )
                                     last_live_preview_mtime = current_mtime
+                                    _start_preview_task(
+                                        prepare_preview_updates(
+                                            candidate_path, loop.workspace
+                                        )
+                                    )
                         elif (
                             selected_convert_type == ConvertType.DEEPPRESENTER
                             and yield_msg.role == Role.TOOL
@@ -1510,12 +1536,10 @@ class ChatDemo:
                                 list((loop.workspace / "slides").glob("slide_*.html"))
                             )
                             if slide_html_count > last_freeform_html_count:
-                                (
-                                    preview_status_update,
-                                    preview_gallery_update,
-                                    pdf_preview_update,
-                                    last_freeform_html_count,
-                                ) = await prepare_freeform_preview_updates(loop.workspace)
+                                last_freeform_html_count = slide_html_count
+                                _start_preview_task(
+                                    prepare_freeform_preview_updates(loop.workspace)
+                                )
 
                         role_msg = f"{ROLE_EMOJI[yield_msg.role]} **{str(yield_msg.role).title()} Message**"
                         if yield_msg.text:
