@@ -719,6 +719,7 @@ footer,
 _sessions: dict[str, "UserSession"] = {}
 _session_lock = asyncio.Lock()
 _SESSION_TTL = 2 * 60 * 60  # 2 hours
+_last_loaded_session: "UserSession | None" = None
 
 
 class UserSession:
@@ -837,12 +838,21 @@ class UserSession:
 
 async def get_or_create_session(workspace: str, cookie_session_id: str | None) -> UserSession:
     """Get existing session by cookie ID or create a new one."""
+    global _last_loaded_session
     async with _session_lock:
         # Clean expired sessions
         now = time.time()
         expired = [sid for sid, s in _sessions.items() if now - s.last_active > _SESSION_TTL]
         for sid in expired:
             del _sessions[sid]
+
+        # Check if a session was just loaded from history
+        if _last_loaded_session is not None:
+            session = _last_loaded_session
+            _last_loaded_session = None
+            _sessions[session.session_id] = session
+            session.touch()
+            return session
 
         # Try to reuse existing session
         if cookie_session_id and cookie_session_id in _sessions:
@@ -1030,6 +1040,25 @@ class ChatDemo:
                             placeholder=f"留空使用默认路径 ({WORKSPACE_BASE})",
                             info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
                         )
+
+                    with gr.Accordion("📜 历史会话", open=False):
+                        session_dd = gr.Dropdown(
+                            label="选择会话",
+                            choices=[],
+                            value=None,
+                            info="选择一个历史会话加载",
+                        )
+                        with gr.Row():
+                            refresh_sessions_btn = gr.Button(
+                                "刷新列表", size="sm", scale=1
+                            )
+                            load_session_btn = gr.Button(
+                                "加载选中会话",
+                                size="sm",
+                                variant="primary",
+                                scale=1,
+                                interactive=False,
+                            )
 
                     with gr.Group(elem_classes=["composer-shell"]):
                         gr.HTML(
@@ -1957,6 +1986,62 @@ class ChatDemo:
                 _refresh_log,
                 inputs=[loop_state],
                 outputs=[log_display],
+            )
+
+            def _refresh_sessions(workspace):
+                ws = Path(workspace.strip()) if workspace.strip() else Path(WORKSPACE_BASE)
+                sessions = UserSession.list_sessions(ws)
+                if not sessions:
+                    return gr.update(choices=[], value=None), gr.update(interactive=False)
+                choices = []
+                for s in sessions:
+                    ts = s.get("last_active", "")[:16].replace("T", " ")
+                    label = s.get("instruction", "无描述")[:40]
+                    pages = s.get("num_pages", "?")
+                    sid = s.get("session_id", "")
+                    choices.append((f"[{ts}] {label} ({pages}页)", sid))
+                return gr.update(choices=choices, value=None), gr.update(
+                    interactive=False
+                )
+
+            def _on_session_select(sid):
+                return gr.update(interactive=sid is not None)
+
+            session_dd.change(
+                _on_session_select,
+                inputs=[session_dd],
+                outputs=[load_session_btn],
+            )
+
+            refresh_sessions_btn.click(
+                _refresh_sessions,
+                inputs=[workspace_input],
+                outputs=[session_dd, load_session_btn],
+            )
+
+            def _load_session(session_id, workspace, chatbot_history):
+                global _last_loaded_session
+                if not session_id:
+                    return chatbot_history, gr.update(), gr.update(), gr.update(), gr.update()
+                ws = Path(workspace.strip()) if workspace.strip() else Path(WORKSPACE_BASE)
+                session = UserSession.load(ws, session_id)
+                if session is None:
+                    return chatbot_history, gr.update(), gr.update(), gr.update(), gr.update()
+                # Store as last loaded so send_message can pick it up
+                _last_loaded_session = session
+                new_history = list(session.chat_history) if session.chat_history else chatbot_history
+                return (
+                    new_history,
+                    gr.update(value=f"已加载: {session.instruction[:50]}"),
+                    gr.update(value=session.template or "auto"),
+                    gr.update(value=str(session.num_pages) if session.num_pages else "auto"),
+                    gr.update(value=session.convert_type or list(CONVERT_MAPPING)[0]),
+                )
+
+            load_session_btn.click(
+                _load_session,
+                inputs=[session_dd, workspace_input, chatbot],
+                outputs=[chatbot, session_dd, template_dd, pages_dd, convert_type_dd],
             )
 
         return demo
