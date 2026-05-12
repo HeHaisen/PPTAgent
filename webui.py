@@ -77,6 +77,10 @@ def cleanup_preview_dirs(workspace: Path, keep: int = _MAX_PREVIEW_DIRS) -> None
             pass
 
 
+_MAX_CONCURRENT_SESSIONS = int(os.getenv("DP_MAX_CONCURRENT", "3"))
+_session_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SESSIONS)
+
+
 def detect_ppt_preview_dependencies() -> dict[str, object]:
     """Detect runtime dependencies for PPT image preview."""
     unoconvert_path = which("unoconvert")
@@ -1742,7 +1746,7 @@ class ChatDemo:
                     pdf_preview_html,
                     loop_state,
                 ],
-                concurrency_limit=None,
+                concurrency_limit=_MAX_CONCURRENT_SESSIONS,
             )
 
             send_btn.click(
@@ -1769,7 +1773,7 @@ class ChatDemo:
                     pdf_preview_html,
                     loop_state,
                 ],
-                concurrency_limit=None,
+                concurrency_limit=_MAX_CONCURRENT_SESSIONS,
             )
 
             def _on_cancel(current_loop):
