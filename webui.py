@@ -893,6 +893,12 @@ class ChatDemo:
                             variant="primary",
                             elem_classes=["full-send-btn"],
                         )
+                        cancel_btn = gr.Button(
+                            "停止生成",
+                            variant="stop",
+                            visible=True,
+                        )
+                        loop_state = gr.State(None)
 
                     with gr.Accordion("📊 Token 使用统计", open=False):
                         token_display = gr.Markdown(
@@ -1308,6 +1314,7 @@ class ChatDemo:
                         gr.update(),
                         gr.update(),
                         gr.update(),
+                        None,
                     )
                     return
 
@@ -1351,6 +1358,7 @@ class ChatDemo:
                             gr.update(value="⚠️ 自定义模板处理失败。"),
                             gr.update(value=[], visible=False),
                             gr.update(value="", visible=False),
+                            None,
                         )
                         return
 
@@ -1404,6 +1412,7 @@ class ChatDemo:
                     gr.update(value="⏳ 正在生成内容，请稍候..."),
                     gr.update(value=[], visible=False),
                     gr.update(value="", visible=False),
+                    loop,
                 )
 
                 stream = loop.run(
@@ -1472,6 +1481,7 @@ class ChatDemo:
                                 preview_status_update,
                                 preview_gallery_update,
                                 pdf_preview_update,
+                                loop,
                             )
                         continue
                     except StopAsyncIteration:
@@ -1513,6 +1523,7 @@ class ChatDemo:
                             preview_status_update,
                             preview_gallery_update,
                             pdf_preview_update,
+                            loop,
                         )
 
                     elif isinstance(yield_msg, ChatMessage):
@@ -1626,6 +1637,7 @@ class ChatDemo:
                             preview_status_update,
                             preview_gallery_update,
                             pdf_preview_update,
+                            loop,
                         )
 
                     else:
@@ -1654,6 +1666,7 @@ class ChatDemo:
                     preview_status,
                     preview_gallery,
                     pdf_preview_html,
+                    loop_state,
                 ],
                 concurrency_limit=None,
             )
@@ -1679,8 +1692,21 @@ class ChatDemo:
                     preview_status,
                     preview_gallery,
                     pdf_preview_html,
+                    loop_state,
                 ],
                 concurrency_limit=None,
+            )
+
+            def _on_cancel(current_loop):
+                if current_loop is not None:
+                    current_loop.cancel()
+                    return gr.update(value="⏳ 正在停止...")
+                return gr.update()
+
+            cancel_btn.click(
+                _on_cancel,
+                inputs=[loop_state],
+                outputs=[preview_status],
             )
 
         return demo
