@@ -453,14 +453,21 @@ class PPTAgent(PPTGen):
             slide_content += "\nImages:\n" + "\n".join(images)
             layouts = self.multimodal_layouts
 
+        recent = getattr(self, "_recent_layouts", [])
         _, layout_selection = await self.staffs["layout_selector"](
             outline=self.simple_outline,
             slide_description=header,
             slide_content=slide_content,
             available_layouts=layouts,
+            recent_layouts=recent if recent else None,
             response_format=LayoutChoice.response_model(layouts),
         )
         layout = layout_selection["layout"]
+        if not hasattr(self, "_recent_layouts"):
+            self._recent_layouts = []
+        self._recent_layouts.append(layout)
+        if len(self._recent_layouts) > 3:
+            self._recent_layouts = self._recent_layouts[-3:]
         if "image" not in layout and len(images) > 0:
             slide_content = slide_content[: slide_content.rfind("\nImages:\n")]
         return self.layouts[layout], header, slide_content

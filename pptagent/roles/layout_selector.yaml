@@ -33,6 +33,9 @@ template: |
   {{ slide_content }}
 
   Layout Options: {{ available_layouts }}
+  {% if recent_layouts %}
+  Recently Used Layouts (prefer a different layout for visual variety unless the content strongly calls for one of these): {{ recent_layouts }}
+  {% endif %}
 
   Output: give your anwser in json format
 
@@ -41,5 +44,6 @@ jinja_args:
   - slide_description
   - slide_content
   - available_layouts
+  - recent_layouts
 use_model: language
 return_json: true
