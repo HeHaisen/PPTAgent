@@ -85,6 +85,8 @@ class PPTAgentServer(PPTAgent):
         self.layout: Layout | None = None
         self.editor_output: EditorOutput | None = None
         self.preview_pptx_path = Path(".preview") / "live_preview.pptx"
+        self._preview_save_interval = 3
+        self._slide_count_since_preview = 0
         self.direct_edit_mode = False
         self.direct_edit_layout_order: list[str] = []
         self.direct_edit_next_layout_idx = 0
@@ -179,6 +181,7 @@ class PPTAgentServer(PPTAgent):
         self.slides = []
         self.layout = None
         self.editor_output = None
+        self._slide_count_since_preview = 0
         self.direct_edit_mode = False
         self.direct_edit_layout_order = []
         self.direct_edit_next_layout_idx = 0
@@ -420,17 +423,26 @@ class PPTAgentServer(PPTAgent):
                 shuffle(available_layouts)
             preview_warning = None
             preview_pptx_path = None
-            try:
-                preview_pptx_path = self._save_live_preview_snapshot()
-            except Exception as e:
-                preview_warning = f"Failed to save live preview snapshot: {e}"
-                logger.warning(preview_warning)
+            preview_saved = False
+            self._slide_count_since_preview += 1
+            should_save_preview = (
+                self._slide_count_since_preview >= self._preview_save_interval
+            )
+            if should_save_preview:
+                try:
+                    preview_pptx_path = self._save_live_preview_snapshot()
+                    self._slide_count_since_preview = 0
+                    preview_saved = True
+                except Exception as e:
+                    preview_warning = f"Failed to save live preview snapshot: {e}"
+                    logger.warning(preview_warning)
 
             result = {
                 "message": f"Slide {slide_number:02d} generated successfully",
                 "slide_number": slide_number,
                 "next_steps": "You can now save the slides or continue generating more slides",
                 "available_layouts": available_layouts,
+                "preview_saved": preview_saved,
             }
             if preview_pptx_path:
                 result["preview_pptx_path"] = preview_pptx_path
