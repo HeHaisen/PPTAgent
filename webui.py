@@ -1091,10 +1091,12 @@ class ChatDemo:
                         )
 
                     try:
+                        stat = output_path.stat()
+                        cache_key = f"{output_path.stem}_{int(stat.st_mtime)}_{stat.st_size}"
                         preview_dir = (
                             workspace
                             / ".preview"
-                            / f"{output_path.stem}_{int(time.time() * 1000)}"
+                            / cache_key
                         )
                         preview_dir.mkdir(parents=True, exist_ok=True)
                         await ppt_to_images(
