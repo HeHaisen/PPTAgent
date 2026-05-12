@@ -34,10 +34,50 @@ _FONT_SIZE_RE = re.compile(
     r"font-size\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(px|pt)\b",
     re.IGNORECASE,
 )
+_COLOR_RE = re.compile(
+    r"color\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))",
+    re.IGNORECASE,
+)
+_BG_COLOR_RE = re.compile(
+    r"background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))",
+    re.IGNORECASE,
+)
 
 
 def _to_px(value: float, unit: str) -> float:
     return value if unit.lower() == "px" else value * 96 / 72
+
+
+def _parse_color(color_str: str) -> tuple[int, int, int] | None:
+    """Parse a CSS color string to (r, g, b) tuple. Returns None if unparseable."""
+    color_str = color_str.strip().lower()
+    if color_str.startswith("#"):
+        hex_str = color_str[1:]
+        if len(hex_str) == 3:
+            return (int(hex_str[0] * 2, 16), int(hex_str[1] * 2, 16), int(hex_str[2] * 2, 16))
+        if len(hex_str) >= 6:
+            return (int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16))
+    m = re.match(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", color_str)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+
+
+def _relative_luminance(r: int, g: int, b: int) -> float:
+    """Calculate relative luminance per WCAG 2.0."""
+    def linearize(c: int) -> float:
+        s = c / 255.0
+        return s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+    return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+
+
+def _contrast_ratio(color1: tuple[int, int, int], color2: tuple[int, int, int]) -> float:
+    """Calculate WCAG contrast ratio between two colors."""
+    l1 = _relative_luminance(*color1)
+    l2 = _relative_luminance(*color2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return (lighter + 0.05) / (darker + 0.05)
 
 
 def _min_font_rule(selector: str) -> tuple[float, str] | None:
@@ -138,16 +178,68 @@ def _collect_font_size_issues(html_text: str) -> list[str]:
     return issues
 
 
+def _collect_contrast_issues(html_text: str) -> list[str]:
+    """Check color contrast between text and background elements."""
+    issues: list[str] = []
+    seen: set[str] = set()
+
+    def check_contrast(selector: str, declarations: str, font_size_px: float = 18.0) -> None:
+        color_match = _COLOR_RE.search(declarations)
+        bg_match = _BG_COLOR_RE.search(declarations)
+        if not color_match or not bg_match:
+            return
+        fg = _parse_color(color_match.group(1))
+        bg = _parse_color(bg_match.group(1))
+        if fg is None or bg is None:
+            return
+        ratio = _contrast_ratio(fg, bg)
+        min_ratio = 3.0 if font_size_px >= 24 else 4.5
+        key = f"{selector}:{fg}:{bg}"
+        if ratio >= min_ratio or key in seen:
+            return
+        seen.add(key)
+        issues.append(
+            f"`{selector}` 对比度 {ratio:.1f}:1 低于 WCAG AA 标准 ({min_ratio}:1)，"
+            f"前景色 {color_match.group(1)} 与背景色 {bg_match.group(1)}"
+        )
+
+    for style_block in _STYLE_BLOCK_RE.findall(html_text):
+        for rule_match in _STYLE_RULE_RE.finditer(style_block):
+            declarations = rule_match.group("declarations")
+            selectors = [
+                " ".join(s.split()) for s in rule_match.group("selectors").split(",")
+            ]
+            size_match = _FONT_SIZE_RE.search(declarations)
+            font_px = _to_px(float(size_match.group(1)), size_match.group(2)) if size_match else 18.0
+            for selector in selectors:
+                if _min_font_rule(selector) is not None:
+                    check_contrast(selector, declarations, font_px)
+
+    for inline_match in _INLINE_STYLE_RE.finditer(html_text):
+        tag = inline_match.group("tag").lower()
+        attrs = inline_match.group("attrs")
+        style = inline_match.group("style")
+        class_match = _CLASS_ATTR_RE.search(attrs)
+        classes = ""
+        if class_match is not None:
+            classes = "." + ".".join(class_match.group("classes").split())
+        size_match = _FONT_SIZE_RE.search(style)
+        font_px = _to_px(float(size_match.group(1)), size_match.group(2)) if size_match else 18.0
+        check_contrast(f"inline <{tag}>{classes}", style, font_px)
+
+    return issues
+
+
 def _format_slide_audit_error(issues: list[str]) -> str:
     preview = issues[:8]
     details = "\n".join(f"- {issue}" for issue in preview)
     if len(issues) > len(preview):
-        details += f"\n- 另外还有 {len(issues) - len(preview)} 处字号过小"
+        details += f"\n- 另外还有 {len(issues) - len(preview)} 处可读性问题"
     return (
         "Slide readability check failed:\n"
         f"{details}\n"
         "请通过重排布局、增加换行、改为纵向堆叠或减少装饰元素来消除溢出，"
-        "不要继续缩小字号。"
+        "不要继续缩小字号。对比度不足时请调整文字或背景颜色。"
     )
 
 
@@ -167,9 +259,12 @@ async def inspect_slide(
     assert html_path.is_file() and html_path.suffix == ".html", (
         f"HTML path {html_path} does not exist or is not an HTML file"
     )
-    audit_issues = _collect_font_size_issues(html_path.read_text(encoding="utf-8"))
-    if audit_issues:
-        return _format_slide_audit_error(audit_issues)
+    html_text = html_path.read_text(encoding="utf-8")
+    audit_issues = _collect_font_size_issues(html_text)
+    contrast_issues = _collect_contrast_issues(html_text)
+    all_issues = audit_issues + contrast_issues
+    if all_issues:
+        return _format_slide_audit_error(all_issues)
 
     try:
         await convert_html_to_pptx(html_path, aspect_ratio=aspect_ratio)
