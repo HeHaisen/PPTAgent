@@ -98,36 +98,38 @@ class Layout(BaseModel):
                     )
                 editor_output[el.name].data[i] = sim_image
 
+    @staticmethod
+    def _truncate_text(text: str, max_len: int) -> str:
+        """Truncate text to max_len, preferring sentence/word boundaries."""
+        if len(text) <= max_len:
+            return text
+        # Try to cut at sentence boundary
+        cut = text[:max_len]
+        for sep in ["。", ".", "！", "!", "？", "?", "；", ";"]:
+            idx = cut.rfind(sep)
+            if idx > max_len * 0.5:
+                return cut[: idx + 1]
+        # Try to cut at word boundary
+        idx = cut.rfind(" ")
+        if idx > max_len * 0.5:
+            return cut[:idx] + "..."
+        return cut.rstrip() + "..."
+
     async def length_rewrite(
         self,
         editor_output: EditorOutput,
         length_factor: float,
         language_model: AsyncLLM,
     ):
-        async with asyncio.TaskGroup() as tg:
-            tasks = []
-            for el in editor_output.elements:
-                if self[el.name].type != "text":
-                    continue
-                charater_counts = max([len(i) for i in el.data])
-                expected_length = ceil(
-                    self[el.name].suggested_characters * length_factor
-                )
-                if charater_counts - expected_length > 5:
-                    task = tg.create_task(
-                        language_model(
-                            LENGTHY_REWRITE_PROMPT.render(
-                                el_name=el.name,
-                                content=el.data,
-                                suggested_characters=f"{self[el.name].suggested_characters} characters",
-                            ),
-                            return_json=True,
-                        )
-                    )
-                    tasks.append([el.name, task])
-
-            for el_name, task in tasks:
-                editor_output[el_name].data = await task
+        for el in editor_output.elements:
+            if self[el.name].type != "text":
+                continue
+            expected_length = ceil(
+                self[el.name].suggested_characters * length_factor
+            )
+            el.data = [
+                self._truncate_text(item, expected_length) for item in el.data
+            ]
 
     @property
     def content_schema(self):
