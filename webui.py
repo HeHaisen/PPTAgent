@@ -13,6 +13,7 @@ from shutil import which
 from urllib.parse import quote
 
 import gradio as gr
+import jsonlines
 from pdf2image import convert_from_path
 
 from deeppresenter.main import AgentLoop
@@ -735,10 +736,103 @@ class UserSession:
         self.created_time = time.time()
         self.last_active = time.time()
         self.chat_history: list[dict] = []
+        # Session metadata for history
+        self.instruction: str = ""
+        self.template: str = ""
+        self.num_pages: int | None = None
+        self.convert_type: str = ""
+        self.status: str = "active"  # active, completed, failed
 
     def touch(self):
         """Update last activity timestamp."""
         self.last_active = time.time()
+
+    @property
+    def _sessions_dir(self) -> Path:
+        """Return the sessions directory for this workspace."""
+        return self.loop.workspace / ".sessions"
+
+    @property
+    def _session_dir(self) -> Path:
+        """Return this session's storage directory."""
+        return self._sessions_dir / self.session_id.replace("/", "_")
+
+    def save(self):
+        """Save session data to disk."""
+        session_dir = self._session_dir
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save session metadata
+        meta = {
+            "session_id": self.session_id,
+            "created_at": datetime.fromtimestamp(self.created_time).isoformat(),
+            "last_active": datetime.fromtimestamp(self.last_active).isoformat(),
+            "instruction": self.instruction,
+            "template": self.template,
+            "num_pages": self.num_pages,
+            "convert_type": self.convert_type,
+            "status": self.status,
+            "slide_count": len(self.chat_history),
+            "workspace": str(self.loop.workspace),
+        }
+        (session_dir / "session.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        # Save chat history
+        with jsonlines.open(session_dir / "chat_history.jsonl", mode="w") as writer:
+            for msg in self.chat_history:
+                writer.write(msg)
+
+    @classmethod
+    def load(cls, workspace: Path, session_id: str) -> "UserSession | None":
+        """Load a session from disk."""
+        session_dir = workspace / ".sessions" / session_id.replace("/", "_")
+        meta_file = session_dir / "session.json"
+        if not meta_file.exists():
+            return None
+
+        try:
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            session = cls(
+                workspace=meta.get("workspace", str(workspace)),
+                session_id=meta.get("session_id", session_id),
+            )
+            session.instruction = meta.get("instruction", "")
+            session.template = meta.get("template", "")
+            session.num_pages = meta.get("num_pages")
+            session.convert_type = meta.get("convert_type", "")
+            session.status = meta.get("status", "active")
+            session.created_time = datetime.fromisoformat(meta["created_at"]).timestamp()
+            session.last_active = datetime.fromisoformat(meta["last_active"]).timestamp()
+
+            # Load chat history
+            history_file = session_dir / "chat_history.jsonl"
+            if history_file.exists():
+                with jsonlines.open(history_file) as reader:
+                    session.chat_history = list(reader)
+
+            return session
+        except Exception:
+            return None
+
+    @staticmethod
+    def list_sessions(workspace: Path) -> list[dict]:
+        """List all sessions in a workspace, sorted by last_active desc."""
+        sessions_dir = workspace / ".sessions"
+        if not sessions_dir.exists():
+            return []
+
+        sessions = []
+        for session_file in sessions_dir.glob("*/session.json"):
+            try:
+                meta = json.loads(session_file.read_text(encoding="utf-8"))
+                sessions.append(meta)
+            except Exception:
+                continue
+
+        sessions.sort(key=lambda s: s.get("last_active", ""), reverse=True)
+        return sessions
 
 
 async def get_or_create_session(workspace: str, cookie_session_id: str | None) -> UserSession:
@@ -1486,6 +1580,14 @@ class ChatDemo:
                         "editable_template_layout_names": prepared_template.editable_layout_names,
                         "preserved_template_slide_indices": prepared_template.preserved_slide_indices,
                     })
+
+                # Save session metadata
+                user_session.instruction = message or "请根据上传的附件制作 PPT"
+                user_session.template = template_value or "auto"
+                user_session.num_pages = selected_num_pages
+                user_session.convert_type = convert_type_value
+                user_session.save()
+
                 last_live_preview_mtime: float | None = None
                 last_freeform_html_count = 0
 
@@ -1776,6 +1878,8 @@ class ChatDemo:
 
                 # Final save of history to session
                 user_session.chat_history = list(history)
+                user_session.status = "completed"
+                user_session.save()
                 cleanup_preview_dirs(loop.workspace)
 
             msg_input.submit(
