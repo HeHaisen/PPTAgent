@@ -181,6 +181,8 @@ class Agent:
                     reasoning=getattr(response.choices[0].message, "reasoning", None)
                     if self.keep_reasoning
                     else None,
+                    reasoning_content=getattr(response.choices[0].message, "reasoning_content", None)
+                    or (getattr(response.choices[0].message, "model_extra", None) or {}).get("reasoning_content"),
                 )
             )
             self.log_message(self.chat_history[-1])
@@ -219,6 +221,8 @@ class Agent:
                 reasoning=getattr(agent_message, "reasoning", None)
                 if self.keep_reasoning
                 else None,
+                reasoning_content=getattr(agent_message, "reasoning_content", None)
+                or (getattr(agent_message, "model_extra", None) or {}).get("reasoning_content"),
             )
         )
         self.log_message(self.chat_history[-1])
@@ -371,6 +375,8 @@ class Agent:
             reasoning=getattr(agent_message, "reasoning", None)
             if self.keep_reasoning
             else None,
+            reasoning_content=getattr(agent_message, "reasoning_content", None)
+            or (getattr(agent_message, "model_extra", None) or {}).get("reasoning_content"),
         )
         debug(
             f"Summary of Resarch Iter {self.research_iter:02d}: \n"

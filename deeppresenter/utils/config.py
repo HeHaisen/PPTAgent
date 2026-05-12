@@ -100,6 +100,14 @@ class Endpoint(BaseModel):
         tools: list[dict[str, Any]] | None = None,
     ) -> ChatCompletion:
         """Execute a chat or tool call using the endpoint client"""
+        # Convert ChatMessage objects to API dict format (preserves reasoning_content)
+        api_messages = []
+        for msg in messages:
+            if hasattr(msg, "to_api_message"):
+                api_messages.append(msg.to_api_message())
+            else:
+                api_messages.append(msg)
+        messages = api_messages
         if tools is not None:
             response = await self._client.chat.completions.create(
                 model=self.model,

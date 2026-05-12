@@ -76,6 +76,7 @@ class ChatMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     content: None | str | list[dict]
     reasoning: None | str = None
+    reasoning_content: None | str = None  # For thinking-mode models (mimo, deepseek-r1, etc.)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     # This attribute mark if function call failed to execute
     is_error: bool = False
@@ -120,6 +121,23 @@ class ChatMessage(BaseModel):
             if block["type"] == "image_url":
                 return True
         return False
+
+    def to_api_message(self) -> dict[str, Any]:
+        """Convert to OpenAI API message format, preserving reasoning_content for thinking models."""
+        msg: dict[str, Any] = {"role": self.role.value}
+        if self.content:
+            msg["content"] = self.content
+        if self.tool_calls:
+            msg["tool_calls"] = [
+                tc if isinstance(tc, dict) else tc.model_dump() if hasattr(tc, "model_dump") else tc
+                for tc in self.tool_calls
+            ]
+        if self.tool_call_id:
+            msg["tool_call_id"] = self.tool_call_id
+        # Include reasoning_content for thinking-mode models (mimo, deepseek-r1, etc.)
+        if self.reasoning_content:
+            msg["reasoning_content"] = self.reasoning_content
+        return msg
 
 
 class ToolSet(BaseModel):
