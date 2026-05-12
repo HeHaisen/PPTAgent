@@ -66,7 +66,7 @@ class Layout(BaseModel):
                     raise ValueError(
                         f"The length of {el.name}: {num_vary} is not within the allowed range: [{el.variable_length[0]}, {el.variable_length[1]}]"
                     )
-                template_id = self.vary_mapping[str(num_vary)]
+                template_id = self.vary_mapping[num_vary]
                 key = str(len(data[el.name].data))
                 old_data[el.name] = el.variable_data[key]
             else:
