@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import json
 import os
 import re
 import sys
@@ -13,6 +15,46 @@ from deeppresenter.utils.log import set_logger, warning
 from deeppresenter.utils.mineru_api import parse_pdf_offline, parse_pdf_online
 
 mcp = FastMCP(name="Any2Markdown")
+
+
+def _file_hash(file_path: str) -> str:
+    """Compute MD5 hash of a file for cache key."""
+    h = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _get_cache_dir(output_folder: str) -> Path:
+    """Return the cache directory for any2markdown results."""
+    cache_dir = Path(output_folder).parent / ".cache" / "any2markdown"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _cache_lookup(cache_dir: Path, file_hash: str) -> dict | None:
+    """Look up cached result by file hash."""
+    cache_file = cache_dir / f"{file_hash}.json"
+    if cache_file.exists():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            # Verify cached files still exist
+            if Path(cached.get("markdown_file", "")).exists():
+                return cached
+        except (json.JSONDecodeError, OSError):
+            pass
+    return None
+
+
+def _cache_store(cache_dir: Path, file_hash: str, result: dict) -> None:
+    """Store conversion result to cache."""
+    cache_file = cache_dir / f"{file_hash}.json"
+    try:
+        cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
 
 IMAGE_EXTENSIONS = [
     "bmp",
@@ -39,13 +81,20 @@ async def convert_to_markdown(file_path: str, output_folder: str) -> dict:
     Returns:
         The converted results, with file saved to the specified path
     """
+    assert os.path.exists(file_path), f"Error: file {file_path} does not exist"
+
+    # Check cache
+    fhash = _file_hash(file_path)
+    cache_dir = _get_cache_dir(output_folder)
+    cached = _cache_lookup(cache_dir, fhash)
+    if cached is not None:
+        return cached
 
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
     assert len(list(output_path.iterdir())) == 0, (
         f"Output folder {output_folder} is not empty"
     )
-    assert os.path.exists(file_path), f"Error: file {file_path} does not exist"
 
     markdown_file = output_path / f"{Path(file_path).stem}.md"
 
@@ -88,12 +137,14 @@ async def convert_to_markdown(file_path: str, output_folder: str) -> dict:
 
     images_with_info.sort(key=lambda x: int(x[1]), reverse=True)
 
-    return {
+    result = {
         "success": True,
         "markdown_file": str(markdown_file),
         "images": f"Found {len(images_with_info)} images\n"
         + "".join([f"- {img[0]}: {img[1]}x{img[2]}\n" for img in images_with_info]),
     }
+    _cache_store(cache_dir, fhash, result)
+    return result
 
 
 def parse_base64_images(markdown: str, image_dir: Path) -> str:
