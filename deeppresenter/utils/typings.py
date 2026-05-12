@@ -257,6 +257,18 @@ class InputRequest(BaseModel):
                     "Preserved uploaded template slide indices: "
                     + ", ".join(str(page) for page in preserved_pages)
                 )
+        # Incremental generation mode
+        cache_path = self.extra_info.get("incremental_cache_path")
+        if cache_path:
+            pages = self.extra_info.get("incremental_pages", [])
+            pages_str = ", ".join(str(p + 1) for p in pages)
+            prompt.append(
+                f"Incremental Mode: A slide cache exists at {cache_path}. "
+                f"The user wants to modify page(s): {pages_str}. "
+                f"Use the `generate_slides_incremental` tool with this cache file "
+                f"to regenerate only the specified pages while reusing cached data for others. "
+                f"Skip the research phase and go directly to slide generation."
+            )
         return "\n".join(prompt)
 
     @property

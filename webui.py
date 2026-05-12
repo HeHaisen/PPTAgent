@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import socket
 import sys
@@ -721,6 +722,39 @@ _session_lock = asyncio.Lock()
 _SESSION_TTL = 2 * 60 * 60  # 2 hours
 _last_loaded_session: "UserSession | None" = None
 
+_MODIFICATION_RE = re.compile(
+    r"(修改|改一下|把.*改成|替换|更新|调整|重新生成|重做)"
+    r".*?"
+    r"(第\s*(\d+)\s*页|(\d+)\s*页|那[个一]页|这[个一]页|前一页|后一页)",
+    re.IGNORECASE,
+)
+
+
+def _detect_modification_request(message: str) -> list[int] | None:
+    """Detect if the user message is a modification request targeting specific pages.
+
+    Returns a list of 0-based page indices, or None if not a modification request.
+    """
+    if not message:
+        return None
+    matches = list(_MODIFICATION_RE.finditer(message))
+    if not matches:
+        return None
+    pages = []
+    for m in matches:
+        num_str = m.group(3) or m.group(4)
+        if num_str:
+            pages.append(int(num_str) - 1)  # Convert to 0-based
+    return pages if pages else None
+
+
+def _find_latest_cache(workspace: Path) -> Path | None:
+    """Find the most recent .cache.json file in the workspace."""
+    cache_files = list(workspace.glob("**/*.cache.json"))
+    if not cache_files:
+        return None
+    return max(cache_files, key=lambda f: f.stat().st_mtime)
+
 
 class UserSession:
     """简化的用户会话类"""
@@ -1071,7 +1105,7 @@ class ChatDemo:
                         )
                         msg_input = gr.Textbox(
                             label="指令",
-                            placeholder="例如：生成一份 8 页的项目路演 PPT，突出问题、方案、商业模式和财务预测",
+                            placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World\n或：修改第 5 页，增加数据图表",
                             lines=4,
                             max_lines=8,
                         )
@@ -1616,6 +1650,18 @@ class ChatDemo:
                 user_session.num_pages = selected_num_pages
                 user_session.convert_type = convert_type_value
                 user_session.save()
+
+                # Detect modification request for incremental generation
+                modification_pages = _detect_modification_request(message or "")
+                if modification_pages is not None:
+                    cache_file = _find_latest_cache(loop.workspace)
+                    if cache_file is not None:
+                        extra_info["incremental_cache_path"] = str(cache_file)
+                        extra_info["incremental_pages"] = modification_pages
+                        aggregated_parts.append(
+                            f"🔄 检测到修改请求（第 {', '.join(str(p + 1) for p in modification_pages)} 页），"
+                            f"将使用增量生成模式复用已有缓存。"
+                        )
 
                 last_live_preview_mtime: float | None = None
                 last_freeform_html_count = 0

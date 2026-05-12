@@ -108,28 +108,48 @@ class AgentLoop:
                 self.language,
             )
             self._apply_request_constraints(request)
+
+            # Incremental mode: skip research if cache and manuscript exist
+            is_incremental = bool(request.extra_info.get("incremental_cache_path"))
+            existing_manuscript = None
+            if is_incremental:
+                for md_candidate in sorted(self.workspace.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True):
+                    if md_candidate.name.startswith("."):
+                        continue
+                    existing_manuscript = md_candidate
+                    break
+                if existing_manuscript:
+                    yield ChatMessage(
+                        role=Role.SYSTEM,
+                        content=f"🔄 Incremental mode: reusing existing manuscript {existing_manuscript.name}, skipping research phase.",
+                    )
+
             self.agent = self.research_agent
-            try:
-                async for msg in self.research_agent.loop(request):
-                    self._check_cancelled()
-                    if isinstance(msg, str):
-                        md_file = Path(msg)
-                        if not md_file.is_absolute():
-                            md_file = self.workspace / md_file
-                        self.intermediate_output["manuscript"] = md_file
-                        msg = str(md_file)
-                        break
-                    yield msg
-            except Exception as e:
-                error_message = (
-                    f"Research agent failed with error: {e}\n{traceback.format_exc()}"
-                )
-                error(error_message)
-                yield ChatMessage(role=Role.SYSTEM, content=error_message)
-                raise e
-            finally:
-                self.research_agent.save_history()
-                self.save_results()
+            if existing_manuscript:
+                md_file = existing_manuscript
+                self.intermediate_output["manuscript"] = md_file
+            else:
+                try:
+                    async for msg in self.research_agent.loop(request):
+                        self._check_cancelled()
+                        if isinstance(msg, str):
+                            md_file = Path(msg)
+                            if not md_file.is_absolute():
+                                md_file = self.workspace / md_file
+                            self.intermediate_output["manuscript"] = md_file
+                            msg = str(md_file)
+                            break
+                        yield msg
+                except Exception as e:
+                    error_message = (
+                        f"Research agent failed with error: {e}\n{traceback.format_exc()}"
+                    )
+                    error(error_message)
+                    yield ChatMessage(role=Role.SYSTEM, content=error_message)
+                    raise e
+                finally:
+                    self.research_agent.save_history()
+                    self.save_results()
             if request.convert_type == ConvertType.PPTAGENT:
                 self.pptagent = PPTAgent(
                     self.config,
