@@ -22,17 +22,39 @@ class MCPClient:
         self.task: dict[str, asyncio.Task] = {}
         self.stop_event: dict[str, asyncio.Event] = {}
         self.envs = envs
+        self._server_configs: dict[str, MCPServer] = {}  # for reconnection
 
     async def tool_execute(
         self, server_id: str, tool_name: str, tool_params: dict | None
     ):
         if server_id not in self.sessions:
             raise ValueError(f"Server {server_id} is not connected.")
-        session = self.sessions[server_id]
-        result = await asyncio.wait_for(
-            session.call_tool(tool_name, tool_params), MCP_CALL_TIMEOUT
-        )
-        return result
+        try:
+            session = self.sessions[server_id]
+            result = await asyncio.wait_for(
+                session.call_tool(tool_name, tool_params), MCP_CALL_TIMEOUT
+            )
+            return result
+        except (BrokenPipeError, ConnectionError, OSError, EOFError) as e:
+            warning(f"Server {server_id} connection lost ({e}), attempting reconnect...")
+            await self._reconnect_server(server_id)
+            session = self.sessions[server_id]
+            result = await asyncio.wait_for(
+                session.call_tool(tool_name, tool_params), MCP_CALL_TIMEOUT
+            )
+            return result
+
+    async def _reconnect_server(self, server_id: str):
+        """Reconnect a crashed MCP server."""
+        config = self._server_configs.get(server_id)
+        if config is None:
+            raise ValueError(f"No config stored for server {server_id}, cannot reconnect.")
+        try:
+            await self._close_server(server_id)
+        except Exception:
+            pass
+        await self.connect_server(server_id, config)
+        debug(f"Reconnected to server {server_id}")
 
     async def connect_server(self, server_id: str, config: MCPServer):
         """Connect to a single MCP server using MCPServer configuration
@@ -43,6 +65,7 @@ class MCPClient:
         """
         if server_id in self.sessions:
             return
+        self._server_configs[server_id] = config
         ready_event = asyncio.Event()
 
         # This is necessary to ensure in the same event loop
@@ -145,8 +168,13 @@ class MCPClient:
         return actual_tools_dict
 
     async def _close_server(self, server_id: str):
-        self.stop_event[server_id].set()
-        await self.task[server_id]
+        if server_id in self.stop_event:
+            self.stop_event[server_id].set()
+        if server_id in self.task:
+            try:
+                await asyncio.wait_for(self.task[server_id], timeout=5)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self.task[server_id].cancel()
         self.sessions.pop(server_id, None)
         self.stop_event.pop(server_id, None)
         self.task.pop(server_id, None)
