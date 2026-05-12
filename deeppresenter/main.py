@@ -195,6 +195,13 @@ class AgentLoop:
                     warning(
                         f"html2pptx conversion failed, falling back to pdf conversion\n{e}"
                     )
+                    yield ChatMessage(
+                        role=Role.SYSTEM,
+                        content=(
+                            f"⚠️ HTML→PPTX 转换失败（{type(e).__name__}: {e}），"
+                            "已自动回退为 PDF 输出。详情见 .html2pptx-error.txt"
+                        ),
+                    )
                     pptx_path = pptx_path.with_suffix(".pdf")
                     (self.workspace / ".html2pptx-error.txt").write_text(
                         str(e) + "\n" + traceback.format_exc()
