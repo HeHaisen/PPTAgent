@@ -1611,6 +1611,7 @@ class ChatDemo:
                                     preview_status_update = gr.update(
                                         value=progress_text
                                     )
+                                    history[-1]["content"] = progress_text
                             if not preview_pptx_path:
                                 preview_pptx_path = str(
                                     (loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH)
@@ -1651,6 +1652,7 @@ class ChatDemo:
                                 preview_status_update = gr.update(
                                     value=progress_text
                                 )
+                                history[-1]["content"] = progress_text
                                 _start_preview_task(
                                     prepare_freeform_preview_updates(loop.workspace)
                                 )
