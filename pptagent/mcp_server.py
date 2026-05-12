@@ -204,6 +204,64 @@ class PPTAgentServer(PPTAgent):
         preview_presentation.save(str(self.preview_pptx_path))
         return str(self.preview_pptx_path.resolve())
 
+    async def _generate_single_slide(
+        self, layout: str, elements: list[dict]
+    ) -> dict:
+        """Internal: validate layout+elements and generate one slide."""
+        assert self._initialized, (
+            "PPTAgent not initialized, please call `set_template` first"
+        )
+        assert layout in self.layouts, (
+            f"Layout '{layout}' not in available layouts: "
+            + ", ".join(self.layouts)
+        )
+        if self.direct_edit_mode:
+            if self.direct_edit_next_layout_idx >= len(self.direct_edit_layout_order):
+                raise ValueError(
+                    "All editable uploaded-template pages have already been used."
+                )
+            expected_layout = self.direct_edit_layout_order[
+                self.direct_edit_next_layout_idx
+            ]
+            if layout != expected_layout:
+                raise ValueError(
+                    "Direct edit mode requires following the uploaded template order. "
+                    f"Expected `{expected_layout}`, got `{layout}`."
+                )
+
+        layout_obj = self.layouts[layout]
+        editor_output = EditorOutput(
+            elements=[SlideElement(**e) for e in elements]
+        )
+        warnings, errors = mcp_slide_validate(
+            editor_output, layout_obj, self.reference_lang
+        )
+        if errors:
+            raise ValueError(
+                f"Slide validation failed for layout '{layout}':\n"
+                + "\n".join(errors)
+            )
+
+        command_list, template_id = self._generate_commands(
+            editor_output, layout_obj
+        )
+        slide, _ = await self._edit_slide(command_list, template_id)
+
+        self.slides.append(slide)
+        if self.direct_edit_mode:
+            self.generated_slides_by_template_id[template_id] = slide
+            self.direct_edit_next_layout_idx += 1
+
+        slide_number = len(self.slides)
+        result = {
+            "slide_number": slide_number,
+            "layout": layout,
+            "success": True,
+        }
+        if warnings:
+            result["warnings"] = warnings
+        return result
+
     @classmethod
     def list_templates(cls) -> list[str]:
         return [name for name, _ in cls._iter_template_dirs()]
@@ -449,6 +507,72 @@ class PPTAgentServer(PPTAgent):
             if preview_warning:
                 result["preview_warning"] = preview_warning
             return result
+
+        @self.mcp.tool()
+        async def generate_slides_batch(slides: list[dict]):
+            """Generate multiple PowerPoint slides in a single call.
+
+            This is more efficient than calling create_slide + write_slide +
+            generate_slide for each page individually, as it reduces MCP
+            round-trips from 3N to 1.
+
+            Args:
+                slides: List of slide specifications, each containing:
+                    - "layout": Name of the layout to use
+                    - "elements": List of slide elements following the schema:
+                        [{"name": "element_name", "data": ["content1", ...]}]
+
+            Returns:
+                dict: Summary with per-slide results
+            """
+            results = []
+            errors = []
+            for idx, slide_spec in enumerate(slides):
+                layout = slide_spec.get("layout")
+                elements = slide_spec.get("elements", [])
+                if not layout:
+                    errors.append(f"Slide {idx}: missing 'layout' field")
+                    continue
+                try:
+                    result = await self._generate_single_slide(layout, elements)
+                    results.append(result)
+                except Exception as e:
+                    errors.append(f"Slide {idx} (layout={layout}): {e}")
+                    logger.warning(f"Batch slide {idx} failed: {e}")
+
+            # Save a live preview snapshot after the batch
+            preview_pptx_path = None
+            preview_warning = None
+            try:
+                preview_pptx_path = self._save_live_preview_snapshot()
+            except Exception as e:
+                preview_warning = f"Failed to save live preview: {e}"
+                logger.warning(preview_warning)
+
+            if self.direct_edit_mode:
+                available_layouts = self.direct_edit_layout_order[
+                    self.direct_edit_next_layout_idx :
+                ]
+            else:
+                available_layouts = list(self.layouts.keys())
+                shuffle(available_layouts)
+
+            output = {
+                "message": f"Batch generated {len(results)}/{len(slides)} slides",
+                "slides_generated": len(results),
+                "slides_failed": len(errors),
+                "total_slides": len(self.slides),
+                "available_layouts": available_layouts,
+            }
+            if results:
+                output["results"] = results
+            if errors:
+                output["errors"] = errors
+            if preview_pptx_path:
+                output["preview_pptx_path"] = preview_pptx_path
+            if preview_warning:
+                output["preview_warning"] = preview_warning
+            return output
 
         @self.mcp.tool()
         async def save_generated_slides(pptx_path: str):
