@@ -1,4 +1,5 @@
 import os
+import shutil
 import socket
 import sys
 import time
@@ -56,6 +57,24 @@ CONVERT_MAPPING = {
 
 MISSING_PPT_PREVIEW_DEP_MSG = "Neither unoconvert nor soffice is installed"
 LIVE_PREVIEW_PPTX_REL_PATH = Path(".preview") / "live_preview.pptx"
+_MAX_PREVIEW_DIRS = 5  # keep at most N most-recent preview cache dirs
+
+
+def cleanup_preview_dirs(workspace: Path, keep: int = _MAX_PREVIEW_DIRS) -> None:
+    """Remove old preview cache directories, keeping the most recent `keep`."""
+    preview_root = workspace / ".preview"
+    if not preview_root.exists():
+        return
+    dirs = sorted(
+        [d for d in preview_root.iterdir() if d.is_dir()],
+        key=lambda d: d.stat().st_mtime,
+        reverse=True,
+    )
+    for old_dir in dirs[keep:]:
+        try:
+            shutil.rmtree(old_dir)
+        except OSError:
+            pass
 
 
 def detect_ppt_preview_dependencies() -> dict[str, object]:
@@ -1681,6 +1700,8 @@ class ChatDemo:
                         raise ValueError(
                             f"Unsupported response message type: {type(yield_msg)}"
                         )
+
+                cleanup_preview_dirs(loop.workspace)
 
             msg_input.submit(
                 send_message,
