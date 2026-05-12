@@ -1761,8 +1761,7 @@ class ChatDemo:
                                 preview_status_update, preview_gallery_update, pdf_preview_update, _ = result
                             # Embed latest slide image in chatbot
                             if (
-                                isinstance(preview_gallery_update, gr.update)
-                                and hasattr(preview_gallery_update, "value")
+                                hasattr(preview_gallery_update, "value")
                                 and preview_gallery_update.value
                             ):
                                 latest_img = preview_gallery_update.value[-1][0]
