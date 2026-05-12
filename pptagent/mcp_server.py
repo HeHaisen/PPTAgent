@@ -114,6 +114,7 @@ class PPTAgentServer(PPTAgent):
         self.direct_edit_layout_order: list[str] = []
         self.direct_edit_next_layout_idx = 0
         self.generated_slides_by_template_id: dict[int, object] = {}
+        self._slide_cache: list[dict] = []
         model_name, api_base, api_key = self._resolve_model_endpoint()
         model = AsyncLLM(model_name, api_base, api_key)
         workspace = os.getenv("WORKSPACE", None)
@@ -229,6 +230,7 @@ class PPTAgentServer(PPTAgent):
         self.direct_edit_layout_order = []
         self.direct_edit_next_layout_idx = 0
         self.generated_slides_by_template_id = {}
+        self._slide_cache = []
 
     def _build_output_slides(self) -> list:
         if not self.direct_edit_mode:
@@ -305,6 +307,13 @@ class PPTAgentServer(PPTAgent):
         )
 
         self.slides.append(slide)
+        # Cache slide data for incremental regeneration
+        self._slide_cache.append({
+            "index": len(self.slides) - 1,
+            "layout": layout,
+            "content": {e["name"]: e["data"] for e in elements},
+            "template_id": template_id,
+        })
         if self.direct_edit_mode:
             self.generated_slides_by_template_id[template_id] = slide
             self.direct_edit_next_layout_idx += 1
@@ -517,6 +526,16 @@ class PPTAgentServer(PPTAgent):
             )
             slide, _ = await self._edit_slide(command_list, template_id)
 
+            # Cache slide data for incremental regeneration
+            self._slide_cache.append({
+                "index": len(self.slides),
+                "layout": self.layout.title,
+                "content": {
+                    el.name: el.data for el in self.editor_output.elements
+                },
+                "template_id": template_id,
+            })
+
             # Reset state after successful generation
             self.layout = None
             self.editor_output = None
@@ -618,13 +637,20 @@ class PPTAgentServer(PPTAgent):
                 ]
                 gathered = await asyncio.gather(*coros, return_exceptions=True)
 
-                for (idx, layout, _), outcome in zip(valid_specs, gathered):
+                for (idx, layout, elements), outcome in zip(valid_specs, gathered):
                     if isinstance(outcome, Exception):
                         errors.append(f"Slide {idx} (layout={layout}): {outcome}")
                         logger.warning(f"Batch slide {idx} failed: {outcome}")
                         continue
                     slide, template_id, warnings, _ = outcome
                     self.slides.append(slide)
+                    # Cache slide data for incremental regeneration
+                    self._slide_cache.append({
+                        "index": len(self.slides) - 1,
+                        "layout": layout,
+                        "content": {e["name"]: e["data"] for e in elements},
+                        "template_id": template_id,
+                    })
                     slide_number = len(self.slides)
                     result = {
                         "slide_number": slide_number,
@@ -694,11 +720,127 @@ class PPTAgentServer(PPTAgent):
                     f"Current preview contains {saved_slide_count} slides at {pptx.resolve()}. "
                     "Generation state is preserved; continue creating remaining slides."
                 )
+            # Save slide cache for incremental regeneration
+            if self._slide_cache:
+                cache_path = pptx.with_suffix(".cache.json")
+                cache_path.write_text(
+                    json.dumps(self._slide_cache, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                logger.info(f"Slide cache saved to {cache_path}")
             self._reset_generation_state()
             self._initialized = False
             if self.preview_pptx_path.exists():
                 self.preview_pptx_path.unlink()
             return f"total {saved_slide_count} slides saved to {pptx}"
+
+        @self.mcp.tool()
+        async def generate_slides_incremental(
+            slides: list[dict], cache_path: str = ""
+        ):
+            """Incrementally regenerate specific slides while reusing cached data for others.
+
+            Use this when the user wants to modify only certain pages of a previously
+            generated presentation, without regenerating everything from scratch.
+
+            Args:
+                slides: List of slide specs to regenerate, each containing:
+                    - "index": 0-based page index to regenerate
+                    - "layout": Layout name (optional, reuses cached layout if omitted)
+                    - "elements": New content (optional, reuses cached content if omitted)
+                cache_path: Path to the .cache.json file from a previous generation.
+                    If empty, uses the most recent cache in the current workspace.
+
+            Returns:
+                dict: Summary with regenerated slide count and results
+            """
+            assert self._initialized, (
+                "PPTAgent not initialized, please call `set_template` first"
+            )
+
+            # Load cache
+            cache_file = Path(cache_path) if cache_path else None
+            if not cache_file or not cache_file.exists():
+                # Try to find cache in workspace
+                for f in Path(".").glob("*.cache.json"):
+                    if cache_file is None or f.stat().st_mtime > cache_file.stat().st_mtime:
+                        cache_file = f
+            assert cache_file and cache_file.exists(), (
+                f"No cache file found. Provide a valid cache_path or ensure a .cache.json exists in the workspace."
+            )
+
+            cached_slides = json.loads(cache_file.read_text(encoding="utf-8"))
+            total_slides = len(cached_slides)
+
+            # Build index of slides to regenerate
+            regen_map = {}
+            for spec in slides:
+                idx = spec["index"]
+                assert 0 <= idx < total_slides, (
+                    f"Slide index {idx} out of range (0-{total_slides - 1})"
+                )
+                regen_map[idx] = spec
+
+            results = []
+            errors = []
+
+            # Process slides in order
+            for idx in range(total_slides):
+                if idx in regen_map:
+                    # Regenerate this slide with new data
+                    spec = regen_map[idx]
+                    cached = cached_slides[idx]
+                    layout = spec.get("layout", cached["layout"])
+                    elements = spec.get("elements")
+                    if elements is None:
+                        # Rebuild elements from cached content
+                        elements = [
+                            {"name": name, "data": data}
+                            for name, data in cached["content"].items()
+                        ]
+                    try:
+                        result = await self._generate_single_slide(layout, elements)
+                        result["regenerated"] = True
+                        results.append(result)
+                    except Exception as e:
+                        errors.append(f"Slide {idx}: {e}")
+                        logger.warning(f"Incremental slide {idx} failed: {e}")
+                else:
+                    # Reuse cached slide
+                    cached = cached_slides[idx]
+                    layout = cached["layout"]
+                    elements = [
+                        {"name": name, "data": data}
+                        for name, data in cached["content"].items()
+                    ]
+                    try:
+                        result = await self._generate_single_slide(layout, elements)
+                        result["reused_cache"] = True
+                        results.append(result)
+                    except Exception as e:
+                        errors.append(f"Slide {idx} (cached): {e}")
+                        logger.warning(f"Cached slide {idx} failed: {e}")
+
+            # Save preview
+            preview_pptx_path = None
+            try:
+                preview_pptx_path = self._save_live_preview_snapshot()
+            except Exception as e:
+                logger.warning(f"Failed to save preview after incremental: {e}")
+
+            output = {
+                "message": f"Incremental: {len(results)}/{total_slides} slides generated, {len(errors)} errors",
+                "slides_generated": len(results),
+                "slides_failed": len(errors),
+                "total_slides": len(self.slides),
+            }
+            if results:
+                output["results"] = results
+            if errors:
+                output["errors"] = errors
+            if preview_pptx_path:
+                output["preview_pptx_path"] = preview_pptx_path
+            return output
 
 
 def main():
