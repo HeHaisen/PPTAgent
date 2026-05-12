@@ -1530,6 +1530,20 @@ class ChatDemo:
                             preview_pptx_path = None
                             if isinstance(payload, dict):
                                 preview_pptx_path = payload.get("preview_pptx_path")
+                                # Show slide generation progress
+                                slide_num = payload.get("slide_number")
+                                if slide_num:
+                                    if selected_num_pages:
+                                        progress_text = (
+                                            f"⏳ 正在生成第 {slide_num}/{selected_num_pages} 页..."
+                                        )
+                                    else:
+                                        progress_text = (
+                                            f"⏳ 正在生成第 {slide_num} 页..."
+                                        )
+                                    preview_status_update = gr.update(
+                                        value=progress_text
+                                    )
                             if not preview_pptx_path:
                                 preview_pptx_path = str(
                                     (loop.workspace / LIVE_PREVIEW_PPTX_REL_PATH)
@@ -1559,6 +1573,17 @@ class ChatDemo:
                             )
                             if slide_html_count > last_freeform_html_count:
                                 last_freeform_html_count = slide_html_count
+                                if selected_num_pages:
+                                    progress_text = (
+                                        f"⏳ 正在生成第 {slide_html_count}/{selected_num_pages} 页..."
+                                    )
+                                else:
+                                    progress_text = (
+                                        f"⏳ 正在生成第 {slide_html_count} 页..."
+                                    )
+                                preview_status_update = gr.update(
+                                    value=progress_text
+                                )
                                 _start_preview_task(
                                     prepare_freeform_preview_updates(loop.workspace)
                                 )
