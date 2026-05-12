@@ -932,6 +932,20 @@ class ChatDemo:
                             render_markdown=True,
                             elem_classes=["chat-container"],
                         )
+                        with gr.Accordion("📋 系统日志", open=False):
+                            log_display = gr.Code(
+                                value="",
+                                language=None,
+                                label="",
+                                lines=12,
+                                interactive=False,
+                                elem_classes=["log-code-block"],
+                            )
+                            log_refresh_btn = gr.Button(
+                                "刷新日志",
+                                size="sm",
+                                variant="secondary",
+                            )
 
                 with gr.Column(
                     scale=4,
@@ -1054,6 +1068,19 @@ class ChatDemo:
                     'title="Generated PDF Preview"></iframe>'
                     "</div>"
                 )
+
+            def read_workspace_log(loop: AgentLoop, max_lines: int = 200) -> str:
+                """Read the last N lines from the workspace log file."""
+                log_file = loop.workspace / ".history" / "deeppresenter-loop.log"
+                if not log_file.exists():
+                    return "日志文件尚未生成。"
+                try:
+                    lines = log_file.read_text(encoding="utf-8").splitlines()
+                    if len(lines) > max_lines:
+                        lines = lines[-max_lines:]
+                    return "\n".join(lines)
+                except Exception as e:
+                    return f"读取日志失败：{e}"
 
             async def prepare_preview_updates(
                 output_path: Path, workspace: Path
@@ -1719,6 +1746,17 @@ class ChatDemo:
                 _on_cancel,
                 inputs=[loop_state],
                 outputs=[preview_status],
+            )
+
+            def _refresh_log(current_loop):
+                if current_loop is not None:
+                    return read_workspace_log(current_loop)
+                return "尚无活跃会话，日志不可用。"
+
+            log_refresh_btn.click(
+                _refresh_log,
+                inputs=[loop_state],
+                outputs=[log_display],
             )
 
         return demo
