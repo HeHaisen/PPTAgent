@@ -1,6 +1,3 @@
-<div align="center">
-  <img src="resource/pptagent-logo.png" width="240px" alt="PPTAgent Logo">
-</div>
 
 # PPTAgent V3 — Agentic Framework for Reflective PowerPoint Generation
 
