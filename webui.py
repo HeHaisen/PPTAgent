@@ -714,20 +714,52 @@ footer,
 }
 """
 
+# Server-side session storage for reconnection support
+_sessions: dict[str, "UserSession"] = {}
+_session_lock = asyncio.Lock()
+_SESSION_TTL = 2 * 60 * 60  # 2 hours
+
 
 class UserSession:
     """简化的用户会话类"""
 
-    def __init__(self, workspace: str = ""):
+    def __init__(self, workspace: str = "", session_id: str | None = None):
         runtime_config = load_runtime_config()
-        session_id = f"{datetime.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:8]}"
+        self.session_id = session_id or f"{datetime.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:8]}"
         ws = Path(workspace) if workspace.strip() else None
         self.loop = AgentLoop(
             config=runtime_config,
-            session_id=session_id,
+            session_id=self.session_id,
             workspace=ws,
         )
         self.created_time = time.time()
+        self.last_active = time.time()
+        self.chat_history: list[dict] = []
+
+    def touch(self):
+        """Update last activity timestamp."""
+        self.last_active = time.time()
+
+
+async def get_or_create_session(workspace: str, cookie_session_id: str | None) -> UserSession:
+    """Get existing session by cookie ID or create a new one."""
+    async with _session_lock:
+        # Clean expired sessions
+        now = time.time()
+        expired = [sid for sid, s in _sessions.items() if now - s.last_active > _SESSION_TTL]
+        for sid in expired:
+            del _sessions[sid]
+
+        # Try to reuse existing session
+        if cookie_session_id and cookie_session_id in _sessions:
+            session = _sessions[cookie_session_id]
+            session.touch()
+            return session
+
+        # Create new session
+        session = UserSession(workspace=workspace)
+        _sessions[session.session_id] = session
+        return session
 
 
 class ChatDemo:
@@ -931,6 +963,19 @@ class ChatDemo:
                             visible=True,
                         )
                         loop_state = gr.State(None)
+                        # JavaScript to persist session_id in cookie for reconnection
+                        session_cookie_js = """
+                        <script>
+                        (function() {
+                            var match = document.cookie.match(/dp_session_id=([^;]+)/);
+                            if (!match) {
+                                var sid = Date.now().toString(36) + Math.random().toString(36).slice(2);
+                                document.cookie = 'dp_session_id=' + sid + ';path=/;max-age=7200';
+                            }
+                        })();
+                        </script>
+                        """
+                        session_cookie = gr.HTML(value=session_cookie_js, visible=False)
 
                     with gr.Accordion("📊 Token 使用统计", open=False):
                         token_display = gr.Markdown(
@@ -1360,7 +1405,13 @@ class ChatDemo:
                 workspace_value,
                 request: gr.Request,
             ):
-                user_session = UserSession(workspace=workspace_value)
+                # Get session from cookie or create new one
+                cookie_session_id = request.cookies.get("dp_session_id") if request.cookies else None
+                user_session = await get_or_create_session(workspace_value, cookie_session_id)
+
+                # Restore history if reconnecting and chatbot is empty
+                if not history and user_session.chat_history:
+                    history = list(user_session.chat_history)
 
                 has_message = bool(message and message.strip())
                 has_attachments = bool(attachments)
@@ -1701,6 +1752,9 @@ class ChatDemo:
                         aggregated_text = "\n\n".join(aggregated_parts).strip()
                         history[-1]["content"] = aggregated_text
 
+                        # Save history to session for reconnection
+                        user_session.chat_history = list(history)
+
                         token_text = collect_token_stats(loop)
 
                         yield (
@@ -1720,6 +1774,8 @@ class ChatDemo:
                             f"Unsupported response message type: {type(yield_msg)}"
                         )
 
+                # Final save of history to session
+                user_session.chat_history = list(history)
                 cleanup_preview_dirs(loop.workspace)
 
             msg_input.submit(
