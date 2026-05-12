@@ -695,11 +695,14 @@ footer,
 class UserSession:
     """简化的用户会话类"""
 
-    def __init__(self):
+    def __init__(self, workspace: str = ""):
         runtime_config = load_runtime_config()
+        session_id = f"{datetime.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:8]}"
+        ws = Path(workspace) if workspace.strip() else None
         self.loop = AgentLoop(
             config=runtime_config,
-            session_id=f"{datetime.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:8]}",
+            session_id=session_id,
+            workspace=ws,
         )
         self.created_time = time.time()
 
@@ -871,6 +874,12 @@ class ChatDemo:
                             file_count="multiple",
                             type="filepath",
                             elem_classes=["file-container"],
+                        )
+                        workspace_input = gr.Textbox(
+                            label="工作区路径 (workspace)",
+                            value="",
+                            placeholder=f"留空使用默认路径 ({WORKSPACE_BASE})",
+                            info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
                         )
 
                     with gr.Group(elem_classes=["composer-shell"]):
@@ -1298,9 +1307,10 @@ class ChatDemo:
                 custom_template_path,
                 num_pages_value,
                 enable_search_value,
+                workspace_value,
                 request: gr.Request,
             ):
-                user_session = UserSession()
+                user_session = UserSession(workspace=workspace_value)
 
                 has_message = bool(message and message.strip())
                 has_attachments = bool(attachments)
@@ -1656,6 +1666,7 @@ class ChatDemo:
                     custom_template_input,
                     pages_dd,
                     enable_search_cb,
+                    workspace_input,
                 ],
                 outputs=[
                     chatbot,
@@ -1682,6 +1693,7 @@ class ChatDemo:
                     custom_template_input,
                     pages_dd,
                     enable_search_cb,
+                    workspace_input,
                 ],
                 outputs=[
                     chatbot,
@@ -1736,5 +1748,5 @@ if __name__ == "__main__":
         server_port=serve_port,
         share=False,
         max_threads=16,
-        allowed_paths=[WORKSPACE_BASE],
+        allowed_paths=[WORKSPACE_BASE, str(Path.home()), "/tmp"],
     )
