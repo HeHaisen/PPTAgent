@@ -1,386 +1,257 @@
-
-<div align="right">
-  <details>
-    <summary >🌐 Language</summary>
-    <div>
-      <div align="center">
-        <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=en">English</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=zh-CN">简体中文</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=zh-TW">繁體中文</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=ja">日本語</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=ko">한국어</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=hi">हिन्दी</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=th">ไทย</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=fr">Français</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=de">Deutsch</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=es">Español</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=it">Italiano</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=ru">Русский</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=pt">Português</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=nl">Nederlands</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=pl">Polski</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=ar">العربية</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=fa">فارسی</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=tr">Türkçe</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=vi">Tiếng Việt</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=id">Bahasa Indonesia</a>
-        | <a href="https://openaitx.github.io/view.html?user=icip-cas&project=PPTAgent&lang=as">অসমীয়া</a>
-      </div>
-    </div>
-  </details>
-</div>
-
 <div align="center">
-  <img src="resource/pptagent-logo.png" width="240px" alt="https://github.com/icip-cas/PPTAgent">
+  <img src="resource/pptagent-logo.png" width="240px" alt="PPTAgent Logo">
 </div>
 
-https://github.com/user-attachments/assets/938889e8-d7d8-4f4f-b2a1-07ee3ef3991a
+# PPTAgent V3 — Agentic Framework for Reflective PowerPoint Generation
 
-## Contact 📫
-> The main contributor of this repo is a Master's student graduating in 2026, feel free to reach out for collaboration or opportunities.
->
-> 本仓库的主要贡献者是一名 2026 届硕士毕业生，欢迎联系合作或交流机会。
+**PPTAgent** 是一个基于大语言模型的多智能体演示文稿自动生成系统。通过 Research → Design/PPTAgent 协作流水线，在 MCP 工具链和 Docker 沙箱环境中，从主题、文档或参考材料出发，自动生成内容充实、设计专业的 PowerPoint 演示文稿。
 
-<div align="center">
-  <img src="resource/wechat.jpg" width="140px">
-</div>
+> Python ≥ 3.11 · Linux/macOS
 
-## News 📅
-- [2026/01]: We support freeform and template generation support PPTX export, offline mode now! Context management is added to avoid context overflow.
-- [2025/12]: 🔥 Released V2 with major improvements - Deep Research Integration, Free-Form Visual Design, Autonomous Asset Creation, Text-to-Image Generation, and Agent Environment with sandbox & 20+ tools.
-- [2025/09]: 🛠️ MCP server support added - see [MCP Server](PPTAgent/DOC.md#mcp-server-) for configuration details
-- [2025/09]: 🚀 Released v2 with major improvements - see [release notes](https://github.com/icip-cas/PPTAgent/releases/tag/v0.2.0) for details
-- [2025/08]: 🎉 Paper accepted to **EMNLP 2025**!
-- [2025/05]: ✨ Released v1 with core functionality and 🌟 breakthrough: reached 1,000 stars on GitHub! - see [release notes](https://github.com/icip-cas/PPTAgent/releases/tag/v0.1.0) for details
-- [2025/01]: 🔓 Open-sourced the codebase, with experimental code archived at [experiment release](https://github.com/icip-cas/PPTAgent/releases/tag/experiment)
+---
 
-## Usage 📖
+## 系统架构
 
-> [!IMPORTANT]
-> 1. All these API keys, configurations, and services are **required**.
-> 2. Agent Backbone Recommendation: Use Claude for the Research Agent and Gemini for the Design Agent. GLM-5 is also a good choice in open-source models.
-> 3. Offline mode is supported with limited capabilities (see Offline Setup below).
+```
+用户输入 (Prompt + 附件)
+    │
+    ▼
+┌─────────────────────────────────────┐
+│            AgentLoop                │
+│  (deeppresenter/main.py)            │
+│                                     │
+│  ① Research Agent                   │
+│     ├── 网页搜索 (Tavily)           │
+│     ├── 论文学术检索 (Arxiv/SS)      │
+│     ├── 文件解析 (PDF/DOCX/XLSX)     │
+│     ├── 图片搜索/生成/描述           │
+│     └── 输出: Markdown 手稿          │
+│                                     │
+│  ② 生成阶段 (二选一)                 │
+│     ├── PPTAgent 模板模式            │
+│     │   ├── 分析参考 PPTX 布局       │
+│     │   ├── 批量/并发生成幻灯片       │
+│     │   └── 输出: .pptx              │
+│     │                               │
+│     └── Design 自由模式              │
+│         ├── HTML/CSS 像素级设计      │
+│         ├── Playwright 渲染          │
+│         ├── html2pptx 转换           │
+│         └── 输出: .pptx / .pdf       │
+└─────────────────────────────────────┘
+    │
+    ▼
+  PPTX 演示文稿
+```
 
-### Quick Start with CLI 🚀
+### Agent 角色
 
-DeepPresenter now provides a command-line interface for easy usage:
+| Agent | 职责 | 关键能力 |
+|-------|------|---------|
+| **Research Agent** | 内容调研与手稿撰写 | 网页搜索、论文检索、多格式文件解析、图片生成/搜索/描述、长文档摘要 |
+| **PPTAgent Agent** | 模板驱动幻灯片生成 | 分析参考 PPTX 布局结构、根据手稿编排内容、调用 MCP 工具逐页/批量生成 |
+| **Design Agent** | 自由视觉设计 | HTML/CSS 幻灯片设计、反思式布局校验、`inspect_slide` 工具验证可读性与溢出 |
+
+### MCP 工具生态（7 个 Server，20+ 工具）
+
+| MCP Server | 提供工具 |
+|------------|---------|
+| `search` | `search_web`, `search_images`, `fetch_url`, `download_file` |
+| `research` | `search_papers`, `get_paper_authors`, `get_scholar_details` |
+| `any2markdown` | `any2markdown` — PDF/DOCX/XLSX/图片转 Markdown |
+| `task` | Todo 管理与 `finalize` 终止信号 |
+| `deeppresenter` | `inspect_manuscript`, `inspect_slide` — 布局/可读性校验 |
+| `tool_agents` | 图片生成 (T2I)、图片描述 (Caption)、长文档摘要 |
+| `pptagent` | `set_template`, `create_slide`, `write_slide`, `generate_slide`, `generate_slides_batch`, `save_generated_slides` |
+
+所有 MCP Server 通过 stdin/stdout 子进程通信，支持健康检查与自动重连。
+
+---
+
+## 核心特性
+
+### 双模式生成
+
+- **模板编辑模式** — 基于参考 PPTX 分析布局结构，智能编排内容并编辑幻灯片。内置 6 套模板（beamer/cip/default/hit/thu/ucas），支持用户上传自定义模板
+- **自由设计模式** — Design Agent 生成 HTML/CSS，Playwright 渲染后转为 PPTX，支持像素级精细控制
+
+### 实时预览与进度反馈
+
+- 聊天框内嵌幻灯片实时预览（模板/自由模式均支持）
+- 预览写入智能节流（每 3 页保存），后台异步转换不阻塞消息流
+- HTML 预览增量渲染，新增页面仅处理变更文件
+- PPTX 预览基于 `mtime+size` 稳定缓存，未变化不重复转换
+- 生成进度实时显示"正在生成第 N/M 页..."
+
+### 高性能生成
+
+- `generate_slides_batch` 批量工具，一次 MCP 调用生成多页
+- 非 direct-edit 模式下页面级并发生成 (`asyncio.gather`)
+- 文本长度裁剪采用规则化截断（按句子/词边界），消除单页额外 LLM 调用
+- 模板按需懒加载，启动时仅读轻量元信息；目录列表 30s TTL 缓存
+
+### 生成质量优化
+
+- **布局选择确定性** — 移除随机 shuffle，布局选择结果可复现
+- **内容验证增强** — 检测空内容和过短文本，返回 warnings 供 LLM 重试修复
+- **上下文感知编辑** — 编辑器 prompt 包含页码信息和连贯性要求
+- **布局多样性** — 跟踪最近使用的布局，提示 LLM 避免连续重复
+- **图片分布检查** — 检测图片集中问题，打印 warning 日志
+- **WCAG 对比度校验** — `inspect_slide` 工具检查文字与背景颜色对比度（4.5:1/3:1）
+
+### 稳定性与容错
+
+- Playwright 渲染并发控制（2-4），预览优先轻量截图
+- 附件解析基于文件 hash 缓存，大文件自动守卫拒绝解析
+- MCP Server 健康检查 + 自动重连
+- Session 级状态隔离，并发请求速率限制
+- Preview 临时目录自动清理，Playwright 进程优雅关闭与泄漏保护
+- 关键错误（html2pptx 失败等）显式通知用户
+
+### 交互体验
+
+- WebUI "停止生成"按钮，AgentLoop 级取消机制
+- 内嵌系统日志面板（实时查看最近 200 行日志）
+- 工作区路径 WebUI 直接配置
+- 多种宽高比支持（16:9、4:3、A1-A4）
+- 上下文管理（Context Folding），防止 token 溢出
+
+### 离线模式
+
+设置 `offline_mode: true` 可完全离线运行，禁用所有网络依赖工具。需本地部署 MinerU 替代在线 PDF 解析。
+
+---
+
+## 快速开始
+
+### 安装
 
 ```bash
-# Install `uv` for package management
+# 安装 uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Interactive configuration (first time)
+# 首次交互式配置
 uvx pptagent onboard
 
-# Generate presentation
-uvx pptagent generate "Single Page with Title: Hello World" -o hello.pptx
+# 生成演示文稿
+uvx pptagent generate "Hello World 单页演示" -o hello.pptx
 
-# With attachments and options
-uvx pptagent generate "Q4 Report" \
-  -f data.xlsx \
-  -f charts.pdf \
-  -p "10-12" \
-  -o report.pptx
+# 带附件
+uvx pptagent generate "Q4 汇报" -f data.xlsx -f charts.pdf -p "10-12" -o report.pptx
 ```
 
-**CLI Commands:**
-- `pptagent onboard` - Interactive configuration wizard
-- `pptagent generate` - Generate presentations
-- `pptagent config` - View current configuration
-- `pptagent reset` - Reset configuration
+### CLI 命令
 
-**Options:**
-- `-f, --file` - Attachment files (multiple allowed)
-- `-p, --pages` - Number of pages (e.g., "8" or "5-10")
-- `-a, --aspect` - Aspect ratio (16:9, 4:3, A1, A3, A2, A4)
-- `-l, --lang` - Language (en/zh)
-- `-o, --output` - Output directory
+| 命令 | 说明 |
+|------|------|
+| `pptagent onboard` | 交互式配置向导 |
+| `pptagent generate` | 生成演示文稿 |
+| `pptagent config` | 查看当前配置 |
+| `pptagent reset` | 重置配置 |
+
+选项：`-f` 附件 `-p` 页数 `-a` 宽高比 `-l` 语言 `-o` 输出路径
+
+### 本地开发运行
+
+```bash
+uv pip install -e .
+playwright install-deps && playwright install chromium
+npm install --prefix deeppresenter/html2pptx
+python webui.py    # → http://localhost:7861
+```
+
+### Docker 部署
+
+```bash
+docker compose up -d    # → http://localhost:7861
+```
 
 ---
 
-### 1. Environment Configuration
+## 环境配置
 
-- **Create configuration files** (from project root):
+```bash
+cp deeppresenter/config.yaml.example deeppresenter/config.yaml
+cp deeppresenter/mcp.json.example deeppresenter/mcp.json
+```
 
-  ```bash
-  cp deeppresenter/config.yaml.example deeppresenter/config.yaml
-  cp deeppresenter/mcp.json.example deeppresenter/mcp.json
-  ```
+| 配置项 | 说明 |
+|--------|------|
+| `research_agent` | Research Agent 的 LLM 端点与模型 |
+| `design_agent` | Design Agent 的 LLM 端点与模型（推荐多模态模型开反思） |
+| `long_context_model` | 长文档摘要模型 |
+| `vision_model` | 可选，图片描述模型 |
+| `t2i_model` | 可选，文生图模型 |
+| `offline_mode` | 离线模式开关 |
+| `context_folding` | 上下文折叠，防止 token 溢出 |
+| `heavy_reflect` | 重度反思模式，用渲染图片反思设计 |
 
-- **Online setup**:
-  - **MinerU**: Apply for an API key at [mineru.net](https://mineru.net/apiManage/docs). Note that each key is valid for 14 days.
-  - **Tavily**: Apply for an API key at [tavily.com](https://www.tavily.com/).
-  - **LLM**: Set your model endpoint, API keys, and related parameters in `config.yaml`.
+可选服务质量提升：配置 Tavily API Key（提升搜索质量）、MinerU API Key/URL（提升 PDF 解析质量）。
 
-- **Offline setup**:
-  - **MinerU**: Deploy the MinerU server by following the instructions at [MinerU docker guide](https://opendatalab.github.io/MinerU/quick_start/docker_deployment/#start-services-directly-with-docker-compose)
-  - **Config switch**: Set `offline_mode: true` in [`config.yaml`](deeppresenter/config.yaml) to avoid loading network-dependent tools (e.g., `fetch`, `search`).
-  - **MinerU endpoint**: Set `MINERU_API_URL` in [`mcp.json`](deeppresenter/mcp.json) to your local MinerU service URL
+### 环境变量
 
-### 2. Service Startup
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `DP_MAX_CONCURRENT` | 最大并发会话数 | 3 |
+| `MINERU_API_KEY` | MinerU 在线 PDF 解析 API Key | - |
+| `MINERU_API_URL` | MinerU 离线 PDF 解析服务地址 | - |
 
-Build docker images: `docker compose build`
+---
 
-- **From Docker Compose**:
+## 案例展示
 
-  ```bash
-  docker compose up -d
-  ```
-
-- **Running locally**:
-
-  ```bash
-  uv pip install -e .
-  playwright install-deps
-  playwright install chromium
-  npm install
-  python webui.py
-  ```
-
-> [!TIP]
-> 🚀 All configurable variables can be found in [constants.py](deeppresenter/utils/constants.py).
-
-## Case Study 💡
-
-- #### Prompt: Please present the given document to me.
+#### 文档 → 演示文稿
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-
-  <img src="resource/v2/manuscript/0001.jpg" alt="图片1" width="200"/>
-
-  <img src="resource/v2/manuscript/0002.jpg" alt="图片2" width="200"/>
-
-  <img src="resource/v2/manuscript/0003.jpg" alt="图片3" width="200"/>
-
-  <img src="resource/v2/manuscript/0004.jpg" alt="图片4" width="200"/>
-
-  <img src="resource/v2/manuscript/0005.jpg" alt="图片5" width="200"/>
-
-  <img src="resource/v2/manuscript/0006.jpg" alt="图片6" width="200"/>
-
-  <img src="resource/v2/manuscript/0007.jpg" alt="图片7" width="200"/>
-
-  <img src="resource/v2/manuscript/0008.jpg" alt="图片8" width="200"/>
-
-  <img src="resource/v2/manuscript/0009.jpg" alt="图片9" width="200"/>
-
-  <img src="resource/v2/manuscript/0010.jpg" alt="图片10" width="200"/>
-
+  <img src="resource/v2/manuscript/0001.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0002.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0003.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0004.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0005.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0006.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0007.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0008.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0009.jpg" width="200"/>
+  <img src="resource/v2/manuscript/0010.jpg" width="200"/>
 </div>
 
-- #### Prompt: 请介绍小米 SU7 的外观和价格
+#### 产品介绍：小米 SU7
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-
-  <img src="resource/v2/presentation1/0001.jpg" alt="图片1" width="200"/>
-
-  <img src="resource/v2/presentation1/0002.jpg" alt="图片2" width="200"/>
-
-  <img src="resource/v2/presentation1/0003.jpg" alt="图片3" width="200"/>
-
-  <img src="resource/v2/presentation1/0004.jpg" alt="图片4" width="200"/>
-
-  <img src="resource/v2/presentation1/0005.jpg" alt="图片5" width="200"/>
-
-  <img src="resource/v2/presentation1/0006.jpg" alt="图片6" width="200"/>
-
+  <img src="resource/v2/presentation1/0001.jpg" width="200"/>
+  <img src="resource/v2/presentation1/0002.jpg" width="200"/>
+  <img src="resource/v2/presentation1/0003.jpg" width="200"/>
+  <img src="resource/v2/presentation1/0004.jpg" width="200"/>
+  <img src="resource/v2/presentation1/0005.jpg" width="200"/>
+  <img src="resource/v2/presentation1/0006.jpg" width="200"/>
 </div>
 
-- #### Prompt: 请制作一份高中课堂展示课件，主题为“解码立法过程：理解其对国际关系的影响”
+#### 高中课堂课件："解码立法过程"
 
 <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-
-  <img src="resource/v2/presentation2/0001.jpg" alt="图片1" width="200"/>
-
-  <img src="resource/v2/presentation2/0002.jpg" alt="图片2" width="200"/>
-
-  <img src="resource/v2/presentation2/0003.jpg" alt="图片3" width="200"/>
-
-  <img src="resource/v2/presentation2/0004.jpg" alt="图片4" width="200"/>
-
-  <img src="resource/v2/presentation2/0005.jpg" alt="图片5" width="200"/>
-
-  <img src="resource/v2/presentation2/0006.jpg" alt="图片6" width="200"/>
-
-  <img src="resource/v2/presentation2/0007.jpg" alt="图片7" width="200"/>
-
-  <img src="resource/v2/presentation2/0008.jpg" alt="图片8" width="200"/>
-
-  <img src="resource/v2/presentation2/0009.jpg" alt="图片9" width="200"/>
-
-  <img src="resource/v2/presentation2/0010.jpg" alt="图片10" width="200"/>
-
-  <img src="resource/v2/presentation2/0011.jpg" alt="图片11" width="200"/>
-
-  <img src="resource/v2/presentation2/0012.jpg" alt="图片12" width="200"/>
-
-  <img src="resource/v2/presentation2/0013.jpg" alt="图片13" width="200"/>
-
-  <img src="resource/v2/presentation2/0014.jpg" alt="图片14" width="200"/>
-
-  <img src="resource/v2/presentation2/0015.jpg" alt="图片15" width="200"/>
-
+  <img src="resource/v2/presentation2/0001.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0002.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0003.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0004.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0005.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0006.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0007.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0008.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0009.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0010.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0011.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0012.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0013.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0014.jpg" width="200"/>
+  <img src="resource/v2/presentation2/0015.jpg" width="200"/>
 </div>
 
 ---
 
-## Contributors 🌟
+## 致谢
 
-<table>
-<tr>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/Force1ess>
-            <img src=https://avatars.githubusercontent.com/u/72636351?v=4 width="80;"  alt=Force1ess/>
-            <br />
-            <sub style="font-size:14px"><b>Force1ess</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/Puellaquae>
-            <img src=https://avatars.githubusercontent.com/u/22560343?v=4 width="80;"  alt=Puelloc/>
-            <br />
-            <sub style="font-size:14px"><b>Puelloc</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/hysyyds>
-            <img src=https://avatars.githubusercontent.com/u/80150669?v=4 width="80;"  alt=hongyan/>
-            <br />
-            <sub style="font-size:14px"><b>hongyan</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/Dnoob>
-            <img src=https://avatars.githubusercontent.com/u/92987618?v=4 width="80;"  alt=Dnoob/>
-            <br />
-            <sub style="font-size:14px"><b>Dnoob</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/Sadahlu>
-            <img src=https://avatars.githubusercontent.com/u/126563707?v=4 width="80;"  alt=Sadahlu/>
-            <br />
-            <sub style="font-size:14px"><b>Sadahlu</b></sub>
-        </a>
-    </td>
-</tr>
-<tr>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/KurisuMakiseSame>
-            <img src=https://avatars.githubusercontent.com/u/168447425?v=4 width="80;"  alt=KurisuMakiseSame/>
-            <br />
-            <sub style="font-size:14px"><b>KurisuMakiseSame</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/kylooh>
-            <img src=https://avatars.githubusercontent.com/u/26456650?v=4 width="80;"  alt=Eliot White/>
-            <br />
-            <sub style="font-size:14px"><b>Eliot White</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/EvolvedGhost>
-            <img src=https://avatars.githubusercontent.com/u/92856393?v=4 width="80;"  alt=EvolvedGhost/>
-            <br />
-            <sub style="font-size:14px"><b>EvolvedGhost</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/ISCAS-zwl>
-            <img src=https://avatars.githubusercontent.com/u/179820048?v=4 width="80;"  alt=ISCAS-zwl/>
-            <br />
-            <sub style="font-size:14px"><b>ISCAS-zwl</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/James4Ever0>
-            <img src=https://avatars.githubusercontent.com/u/103997068?v=4 width="80;"  alt=James Brown/>
-            <br />
-            <sub style="font-size:14px"><b>James Brown</b></sub>
-        </a>
-    </td>
-</tr>
-<tr>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/LasRuinasCirculares>
-            <img src=https://avatars.githubusercontent.com/u/119716645?v=4 width="80;"  alt=JunZhang/>
-            <br />
-            <sub style="font-size:14px"><b>JunZhang</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/openaitx-system>
-            <img src=https://avatars.githubusercontent.com/u/215529505?v=4 width="80;"  alt=Open AI Tx/>
-            <br />
-            <sub style="font-size:14px"><b>Open AI Tx</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/haosenwang1018>
-            <img src=https://avatars.githubusercontent.com/u/167664334?v=4 width="80;"  alt=Sense_wang/>
-            <br />
-            <sub style="font-size:14px"><b>Sense_wang</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/DeJeune>
-            <img src=https://avatars.githubusercontent.com/u/67425183?v=4 width="80;"  alt=SuYao/>
-            <br />
-            <sub style="font-size:14px"><b>SuYao</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 120.0; height: 120.0">
-        <a href=https://github.com/Dormiveglia-elf>
-            <img src=https://avatars.githubusercontent.com/u/81767213?v=4 width="80;"  alt=Zhenyu/>
-            <br />
-            <sub style="font-size:14px"><b>Zhenyu</b></sub>
-        </a>
-    </td>
-</tr>
-</table>
+本项目在 [PPTAgent](https://github.com/icip-cas/PPTAgent) 基础上进行了大量工程优化，感谢原作者的学术贡献。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=icip-cas/PPTAgent&type=Date)](https://star-history.com/#icip-cas/PPTAgent&Date)
+## License
 
-## Citation 🙏
-
-If you find this project helpful, please use the following to cite it:
-```bibtex
-@inproceedings{zheng-etal-2025-pptagent,
-    title = "{PPTA}gent: Generating and Evaluating Presentations Beyond Text-to-Slides",
-    author = "Zheng, Hao  and
-      Guan, Xinyan  and
-      Kong, Hao  and
-      Zhang, Wenkai  and
-      Zheng, Jia  and
-      Zhou, Weixiang  and
-      Lin, Hongyu  and
-      Lu, Yaojie  and
-      Han, Xianpei  and
-      Sun, Le",
-    editor = "Christodoulopoulos, Christos  and
-      Chakraborty, Tanmoy  and
-      Rose, Carolyn  and
-      Peng, Violet",
-    booktitle = "Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing",
-    month = nov,
-    year = "2025",
-    address = "Suzhou, China",
-    publisher = "Association for Computational Linguistics",
-    url = "https://aclanthology.org/2025.emnlp-main.728/",
-    doi = "10.18653/v1/2025.emnlp-main.728",
-    pages = "14413--14429",
-    ISBN = "979-8-89176-332-6",
-    abstract = "Automatically generating presentations from documents is a challenging task that requires accommodating content quality, visual appeal, and structural coherence. Existing methods primarily focus on improving and evaluating the content quality in isolation, overlooking visual appeal and structural coherence, which limits their practical applicability. To address these limitations, we propose PPTAgent, which comprehensively improves presentation generation through a two-stage, edit-based approach inspired by human workflows. PPTAgent first analyzes reference presentations to extract slide-level functional types and content schemas, then drafts an outline and iteratively generates editing actions based on selected reference slides to create new slides. To comprehensively evaluate the quality of generated presentations, we further introduce PPTEval, an evaluation framework that assesses presentations across three dimensions: Content, Design, and Coherence. Results demonstrate that PPTAgent significantly outperforms existing automatic presentation generation methods across all three dimensions."
-}
-
-@misc{zheng2026deeppresenterenvironmentgroundedreflectionagentic,
-      title={DeepPresenter: Environment-Grounded Reflection for Agentic Presentation Generation},
-      author={Hao Zheng and Guozhao Mo and Xinru Yan and Qianhao Yuan and Wenkai Zhang and Xuanang Chen and Yaojie Lu and Hongyu Lin and Xianpei Han and Le Sun},
-      year={2026},
-      eprint={2602.22839},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2602.22839},
-}
-```
+MIT
