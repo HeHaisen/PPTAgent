@@ -247,6 +247,124 @@ def _collect_contrast_issues(html_text: str) -> list[Issue]:
     return issues
 
 
+# Regex for extracting position/size from inline styles
+_POS_SIZE_RE = re.compile(
+    r"(?:left|top|width|height)\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(px|pt)\b",
+    re.IGNORECASE,
+)
+_SLIDE_BODY_RE = re.compile(
+    r'<body[^>]*style\s*=\s*["\'][^"\']*width\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(px|pt)[^"\']*height\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(px|pt)',
+    re.IGNORECASE,
+)
+_MARGIN_THRESHOLD_PT = 10.0
+
+
+def _parse_bounds(style_str: str) -> dict[str, float] | None:
+    """Extract left/top/width/height in pt from a style string. Returns None if incomplete."""
+    values: dict[str, float] = {}
+    for m in _POS_SIZE_RE.finditer(style_str):
+        prop = m.group(0).split(":")[0].strip().lower()
+        val = float(m.group(1))
+        unit = m.group(2)
+        values[prop] = val if unit.lower() == "pt" else val * 72 / 96
+    if {"left", "top", "width", "height"} <= values.keys():
+        return values
+    return None
+
+
+def _rects_overlap(a: dict[str, float], b: dict[str, float]) -> bool:
+    """Check if two rectangles (left, top, width, height) overlap."""
+    return (
+        a["left"] < b["left"] + b["width"]
+        and a["left"] + a["width"] > b["left"]
+        and a["top"] < b["top"] + b["height"]
+        and a["top"] + a["height"] > b["top"]
+    )
+
+
+def _collect_overlap_issues(html_text: str) -> list[Issue]:
+    """Detect overlapping elements via inline style position/size."""
+    issues: list[Issue] = []
+    elements: list[tuple[str, dict[str, float]]] = []
+
+    for m in _INLINE_STYLE_RE.finditer(html_text):
+        tag = m.group("tag").lower()
+        if tag in ("html", "head", "body", "style", "script"):
+            continue
+        style = m.group("style")
+        bounds = _parse_bounds(style)
+        if bounds is None:
+            continue
+        attrs = m.group("attrs")
+        class_match = _CLASS_ATTR_RE.search(attrs)
+        label = f"<{tag}>"
+        if class_match:
+            label += f".{'.'.join(class_match.group('classes').split())}"
+        elements.append((label, bounds))
+
+    for i in range(len(elements)):
+        for j in range(i + 1, len(elements)):
+            label_a, bounds_a = elements[i]
+            label_b, bounds_b = elements[j]
+            if _rects_overlap(bounds_a, bounds_b):
+                issues.append(Issue(
+                    rule_name="overlap_elements",
+                    severity="warning",
+                    message=f"元素重叠: {label_a} 与 {label_b} 存在位置重叠",
+                    element=f"{label_a}, {label_b}",
+                ))
+    return issues
+
+
+def _collect_margin_issues(html_text: str) -> list[Issue]:
+    """Detect elements too close to slide edges."""
+    issues: list[Issue] = []
+
+    # Extract slide dimensions from body style
+    body_match = _SLIDE_BODY_RE.search(html_text)
+    if not body_match:
+        return issues
+    slide_w = float(body_match.group(1))
+    slide_h = float(body_match.group(3))
+    unit = body_match.group(2)
+    if unit.lower() != "pt":
+        slide_w = slide_w * 72 / 96
+        slide_h = slide_h * 72 / 96
+
+    for m in _INLINE_STYLE_RE.finditer(html_text):
+        tag = m.group("tag").lower()
+        if tag in ("html", "head", "body", "style", "script"):
+            continue
+        style = m.group("style")
+        bounds = _parse_bounds(style)
+        if bounds is None:
+            continue
+
+        violations = []
+        if bounds["left"] < _MARGIN_THRESHOLD_PT:
+            violations.append(f"左边距 {bounds['left']:.0f}pt")
+        if bounds["top"] < _MARGIN_THRESHOLD_PT:
+            violations.append(f"上边距 {bounds['top']:.0f}pt")
+        if bounds["left"] + bounds["width"] > slide_w - _MARGIN_THRESHOLD_PT:
+            violations.append(f"右边距 {slide_w - bounds['left'] - bounds['width']:.0f}pt")
+        if bounds["top"] + bounds["height"] > slide_h - _MARGIN_THRESHOLD_PT:
+            violations.append(f"下边距 {slide_h - bounds['top'] - bounds['height']:.0f}pt")
+
+        if violations:
+            attrs = m.group("attrs")
+            class_match = _CLASS_ATTR_RE.search(attrs)
+            label = f"<{tag}>"
+            if class_match:
+                label += f".{'.'.join(class_match.group('classes').split())}"
+            issues.append(Issue(
+                rule_name="safe_margin",
+                severity="warning",
+                message=f"{label} 距离边缘过近: {', '.join(violations)}",
+                element=label,
+            ))
+    return issues
+
+
 def _format_slide_audit_error(issues: list[Issue]) -> str:
     preview = issues[:8]
     details = "\n".join(f"- [{issue.rule_name}] {issue.message}" for issue in preview)
@@ -277,11 +395,15 @@ async def inspect_slide(
         f"HTML path {html_path} does not exist or is not an HTML file"
     )
     html_text = html_path.read_text(encoding="utf-8")
-    audit_issues = _collect_font_size_issues(html_text)
-    contrast_issues = _collect_contrast_issues(html_text)
-    all_issues = audit_issues + contrast_issues
-    if all_issues:
-        return _format_slide_audit_error(all_issues)
+    all_issues: list[Issue] = []
+    all_issues.extend(_collect_font_size_issues(html_text))
+    all_issues.extend(_collect_contrast_issues(html_text))
+    all_issues.extend(_collect_overlap_issues(html_text))
+    all_issues.extend(_collect_margin_issues(html_text))
+
+    errors = [i for i in all_issues if i.severity == "error"]
+    if errors:
+        return _format_slide_audit_error(errors)
 
     try:
         await convert_html_to_pptx(html_path, aspect_ratio=aspect_ratio)
