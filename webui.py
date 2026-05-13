@@ -1093,6 +1093,23 @@ class ChatDemo:
                                 scale=1,
                                 interactive=False,
                             )
+                        with gr.Row():
+                            resume_btn = gr.Button(
+                                "▶ 继续生成",
+                                size="sm",
+                                variant="primary",
+                                scale=1,
+                                interactive=False,
+                                visible=True,
+                            )
+                            delete_progress_btn = gr.Button(
+                                "🗑 删除进度",
+                                size="sm",
+                                variant="stop",
+                                scale=1,
+                                interactive=False,
+                                visible=True,
+                            )
 
                     with gr.Group(elem_classes=["composer-shell"]):
                         gr.HTML(
@@ -1703,6 +1720,11 @@ class ChatDemo:
                     loop,
                 )
 
+                # Check for resume mode (set by _resume_generation handler)
+                if getattr(user_session.loop, '_resume_mode', False):
+                    extra_info["resume"] = True
+                    user_session.loop._resume_mode = False
+
                 stream = loop.run(
                     InputRequest(
                         instruction=message or "请根据上传的附件制作 PPT",
@@ -1785,6 +1807,10 @@ class ChatDemo:
                         break
                     except asyncio.CancelledError:
                         _cancel_preview_task()
+                        # Save session as interrupted for resume capability
+                        user_session.chat_history = list(history)
+                        user_session.status = "interrupted"
+                        user_session.save()
                         raise
                     next_msg_task = asyncio.create_task(anext(stream))
 
@@ -2040,18 +2066,40 @@ class ChatDemo:
                     label = s.get("instruction", "无描述")[:40]
                     pages = s.get("num_pages", "?")
                     sid = s.get("session_id", "")
-                    choices.append((f"[{ts}] {label} ({pages}页)", sid))
+                    status = s.get("status", "")
+                    prefix = "⏸ " if status == "interrupted" else ""
+                    choices.append((f"{prefix}[{ts}] {label} ({pages}页)", sid))
                 return gr.update(choices=choices, value=None), gr.update(
                     interactive=False
                 )
 
             def _on_session_select(sid):
-                return gr.update(interactive=sid is not None)
+                if not sid:
+                    return (
+                        gr.update(interactive=False),
+                        gr.update(interactive=False),
+                        gr.update(interactive=False),
+                    )
+                # Check session status to enable resume/delete buttons
+                session_dir = WORKSPACE_BASE / ".sessions" / sid.replace("/", "_")
+                meta_file = session_dir / "session.json"
+                is_interrupted = False
+                if meta_file.exists():
+                    try:
+                        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                        is_interrupted = meta.get("status") == "interrupted"
+                    except Exception:
+                        pass
+                return (
+                    gr.update(interactive=True),  # load_session_btn
+                    gr.update(interactive=is_interrupted),  # resume_btn
+                    gr.update(interactive=is_interrupted),  # delete_progress_btn
+                )
 
             session_dd.change(
                 _on_session_select,
                 inputs=[session_dd],
-                outputs=[load_session_btn],
+                outputs=[load_session_btn, resume_btn, delete_progress_btn],
             )
 
             refresh_sessions_btn.click(
@@ -2083,6 +2131,66 @@ class ChatDemo:
                 _load_session,
                 inputs=[session_dd, workspace_input, chatbot],
                 outputs=[chatbot, session_dd, template_dd, pages_dd, convert_type_dd],
+            )
+
+            def _resume_generation(session_id, workspace, chatbot_history):
+                """Resume an interrupted generation session."""
+                global _last_loaded_session
+                if not session_id:
+                    return chatbot_history, gr.update(), gr.update(value="无会话可续传")
+                ws = Path(workspace.strip()) if workspace.strip() else Path(WORKSPACE_BASE)
+                session = UserSession.load(ws, session_id)
+                if session is None:
+                    return chatbot_history, gr.update(), gr.update(value="会话加载失败")
+                # Store as last loaded and set resume flag
+                _last_loaded_session = session
+                session.loop._resume_mode = True
+                new_history = list(session.chat_history) if session.chat_history else chatbot_history
+                return (
+                    new_history,
+                    gr.update(value=session.instruction or "请根据上传的附件制作 PPT"),
+                    gr.update(value="⏳ 正在续传..."),
+                )
+
+            resume_btn.click(
+                _resume_generation,
+                inputs=[session_dd, workspace_input, chatbot],
+                outputs=[chatbot, msg_input, preview_status],
+            )
+
+            def _delete_progress(session_id, workspace):
+                """Delete intermediate progress for a session."""
+                if not session_id:
+                    return gr.update(choices=[], value=None), gr.update(interactive=False), gr.update(interactive=False)
+                ws = Path(workspace.strip()) if workspace.strip() else Path(WORKSPACE_BASE)
+                # Delete partial cache
+                cache_file = ws / ".pptagent_partial_cache.json"
+                if cache_file.exists():
+                    cache_file.unlink()
+                # Delete intermediate output
+                intermediate = ws / "intermediate_output.json"
+                if intermediate.exists():
+                    intermediate.unlink()
+                # Update session status
+                session_dir = WORKSPACE_BASE / ".sessions" / session_id.replace("/", "_")
+                meta_file = session_dir / "session.json"
+                if meta_file.exists():
+                    try:
+                        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                        meta["status"] = "deleted"
+                        meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                    except Exception:
+                        pass
+                return (
+                    gr.update(choices=[], value=None),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                )
+
+            delete_progress_btn.click(
+                _delete_progress,
+                inputs=[session_dd, workspace_input],
+                outputs=[session_dd, resume_btn, delete_progress_btn],
             )
 
         return demo
