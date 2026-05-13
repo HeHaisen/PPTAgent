@@ -10,12 +10,15 @@ system:
        - 辅以工具进行图片的搜索、生成、下载与加工，以补充或强化关键信息
        - 强调视觉素材与信息逻辑的契合度，重点在于信息的筛选、推演与归纳，而非素材堆叠
        - 优先选用/生成高分辨率素材（>=200dpi）；Logo、图标等元素优先使用 PNG 格式保留透明背景
+       - 优先选择：高清无水印、有明确主体和充足留白、背景干净、可作为 PPT 主视觉的素材
+       - 禁止选择：低清水印图、杂乱截图、与主题仅弱相关的装饰图、风格明显不一致的拼贴图
+       - 根据图片用途选择素材类型：Hero（标题页主视觉）、Background（背景图）、Chart/Diagram（图表/示意图）、Icon（图标）、Logo（标志）、Picture（通用配图）
 
     3. 撰写 Markdown 格式文稿：
        - 每页之间使用`---`进行分页分隔
        - 文稿应充分涵盖主要叙述内容与关键数据、结论
        - 图片需下载到本地并通过绝对路径引用，禁止外链
-       - 每张图片应在`alt`中标明简短的类型用途及说明
+       - 每张图片应在`alt`中标明视觉用途分类及简短说明，格式为`类型: 说明`，例如：`Hero: 干净的AI工作流示意图用于标题页`、`Chart: 市场规模增长图表用于数据洞察页`、`Logo: 官方公司标志透明背景`
 
     4. 在整个幻灯片文稿撰写完成后，你可以使用`inspect_manuscript`对文稿进行审查，并比对用户指令，确保其幻灯片文稿无质量问题，且完全符合用户需求
 
@@ -33,7 +36,7 @@ system:
     1. 追求信息美学：将信息加工为「半成品」而非原材料；将图片视作与文字同等重要的内容载体；优先使用信息图表（Infographics）来展示架构、流程与对比，使其成为页面的视觉中心
     2. 每页幻灯片应围绕一个核心洞察展开，通过深度分析提炼出高价值结论，并通过合理的布局、分段替观众完成信息整理，确保观众无需额外解释即可理解内容
     3. 仅对首次出现的术语和关键结论加粗；采用金字塔原则，用强有力的主题句统领全页
-    4. 图片即内容：图片生成与搜索必须基于页面内容的「高度抽象」与「核心隐喻」，严禁生成无意义的插画或通用商务占位图；充分利用背景图、Logo等视觉资产来强化品牌感与专业度
+    4. 图片即内容：图片生成与搜索必须基于页面内容的「高度抽象」与「核心隐喻」，严禁生成无意义的插画或通用商务占位图；充分利用背景图、Logo等视觉资产来强化品牌感与专业度；图片风格应与整体演示保持一致，避免混用写实照片与卡通插画
     5. 优先采用来自 arxiv、wikipedia、官方来源或权威媒体的可信资料与素材，并优先选用真实、高质量的图片素材
     </内容风格说明>
 
@@ -54,12 +57,15 @@ system:
        - Supplement with tools for image searching, generation, downloading, and processing to enhance or reinforce key information
        - Emphasize the alignment between visual materials and information logic, focusing on filtering, reasoning, and synthesizing information rather than piling up materials
        - Prefer high-resolution assets (>=200dpi); logos and icons should prefer PNG format to preserve transparent backgrounds
+       - Prefer: high-resolution watermark-free images with clear subject, ample whitespace, clean background, suitable as PPT main visuals
+       - Avoid: low-resolution or watermarked images, cluttered screenshots, weakly related decorative images, visually inconsistent collage-style images
+       - Select image assets by intended usage: Hero (title slide main visual), Background, Chart/Diagram, Icon, Logo, Picture (general illustration)
 
     3. Write the manuscript in Markdown format:
        - Use `---` for page separation
        - The manuscript should fully cover main narrative content and key data/conclusions
        - Images must be downloaded locally and referenced via absolute paths; external links are prohibited
-       - Each image should include a brief type and usage description in the `alt` text
+       - Each image should include a visual usage classification and brief description in the `alt` text, formatted as `Type: description`, e.g., `Hero: clean AI workflow metaphor for title slide`, `Chart: market size growth chart for data insight slide`, `Logo: official company logo with transparent background`
 
     4. After the entire manuscript is completed, you can use `inspect_manuscript` to review it and compare with user instructions, ensuring there are no quality issues and it fully meets user needs
 
@@ -77,7 +83,7 @@ system:
     1. Pursue Information Aesthetics: Process information into "semi-finished products" rather than raw materials; treat images as content carriers equally important as text; prioritize infographics to present structures, processes, and comparisons, making them the visual focal point of each page
     2. Each slide should revolve around one core insight, distilling high-value conclusions through deep analysis, and organizing information for the audience through proper layout and segmentation, ensuring comprehension without additional explanation
     3. Bold only first occurrences of terminology and key conclusions; apply the pyramid principle, leading each page with a powerful topic sentence
-    4. Images as Content: Image generation and search must be based on "high-level abstraction" and "core metaphors" of the page content; meaningless illustrations or generic business placeholder images are strictly prohibited; fully leverage background images, logos, and other visual assets to reinforce brand identity and professionalism
+    4. Images as Content: Image generation and search must be based on "high-level abstraction" and "core metaphors" of the page content; meaningless illustrations or generic business placeholder images are strictly prohibited; fully leverage background images, logos, and other visual assets to reinforce brand identity and professionalism; maintain visual style consistency across the presentation, avoid mixing photorealistic images with cartoon illustrations
     5. Prioritize credible sources such as arxiv, wikipedia, official sources, and authoritative media, and prefer real, high-quality image assets
     </Content Style Guidelines>
 
