@@ -30,6 +30,7 @@ from pptagent.utils import (
 )
 from deeppresenter.tools.reflect import Issue, inspect_slide_structured
 from deeppresenter.trace.recorder import record_slide_action
+from deeppresenter.trace.repair import build_repair_feedback
 from deeppresenter.trace.storage import TraceStorage
 
 logger = get_logger(__name__)
@@ -575,38 +576,42 @@ class PPTAgent(PPTGen):
             )
         self.empty_prs.validate(edit_slide)
 
-        # Visual quality inspection
+        # Visual quality inspection + repair loop (up to 3 iterations)
         inspection_issues = inspect_slide_structured(edit_slide)
-        if inspection_issues:
+        max_repair_iterations = 3
+        for repair_iter in range(max_repair_iterations):
+            if not inspection_issues:
+                break
             warnings = [i for i in inspection_issues if i.severity == "warning"]
             errors = [i for i in inspection_issues if i.severity == "error"]
             for w in warnings:
                 logger.warning("Slide %d inspection warning: %s", edit_slide.slide_idx, w.message)
-            if errors:
-                error_msg = "; ".join(e.message for e in errors[:3])
-                logger.warning(
-                    "Slide %d inspection errors, attempting repair: %s",
-                    edit_slide.slide_idx,
-                    error_msg,
-                )
-                # Attempt one repair pass via coder
-                repair_actions = await self.staffs["coder"].retry(
-                    f"Visual quality issues found: {error_msg}. "
-                    "Please fix: adjust element positions to avoid overlap, "
-                    "ensure elements have at least 10pt margin from edges, "
-                    "and reduce text density if over 60%.",
-                    error_msg,
-                    turn_id,
-                    self.retry_times,
-                )
-                repair_slide: SlidePage = deepcopy(self.presentation.slides[template_id - 1])
-                feedback = code_executor.execute_actions(
-                    repair_actions, repair_slide, self.source_doc
-                )
-                if feedback is None:
-                    edit_slide = repair_slide
-                    self.empty_prs.validate(edit_slide)
-                    logger.info("Slide %d repair succeeded", edit_slide.slide_idx)
+            if not errors:
+                break
+            logger.warning(
+                "Slide %d inspection errors (attempt %d/%d): %s",
+                edit_slide.slide_idx, repair_iter + 1, max_repair_iterations,
+                "; ".join(e.message for e in errors[:3]),
+            )
+            feedback_msg = build_repair_feedback(errors)
+            repair_actions = await self.staffs["coder"].retry(
+                feedback_msg,
+                "; ".join(e.message for e in errors[:3]),
+                turn_id,
+                self.retry_times + repair_iter + 1,
+            )
+            repair_slide: SlidePage = deepcopy(self.presentation.slides[template_id - 1])
+            feedback = code_executor.execute_actions(
+                repair_actions, repair_slide, self.source_doc
+            )
+            if feedback is None:
+                edit_slide = repair_slide
+                self.empty_prs.validate(edit_slide)
+                logger.info("Slide %d repair attempt %d succeeded", edit_slide.slide_idx, repair_iter + 1)
+                inspection_issues = inspect_slide_structured(edit_slide)
+            else:
+                logger.warning("Slide %d repair attempt %d failed", edit_slide.slide_idx, repair_iter + 1)
+                break
 
         # Record trace
         record_slide_action(
