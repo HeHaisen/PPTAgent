@@ -29,6 +29,8 @@ from pptagent.utils import (
     tenacity_decorator,
 )
 from deeppresenter.tools.reflect import Issue, inspect_slide_structured
+from deeppresenter.trace.recorder import record_slide_action
+from deeppresenter.trace.storage import TraceStorage
 
 logger = get_logger(__name__)
 
@@ -86,6 +88,7 @@ class PPTGen(ABC):
 
     def __post_init__(self):
         self._hire_staffs(self.record_cost, self.language_model, self.vision_model)
+        self.trace_storage = TraceStorage()
 
     def set_reference(
         self,
@@ -169,6 +172,7 @@ class PPTGen(ABC):
         source_doc.metadata["presentation-date"] = datetime.now().strftime("%Y-%m-%d")
         assert self._initialized, "PPTAgent not initialized, call `set_reference` first"
         self.source_doc = source_doc
+        trace_id = self.trace_storage.start_trace(str(datetime.now().timestamp()))
         length_factor = length_factor or os.getenv("PPTAGENT_LENGTH_FACTOR", None)
         if (
             auto_length_factor or os.getenv("PPTAGENT_AUTO_LENGTH_FACTOR", False)
@@ -242,6 +246,9 @@ class PPTGen(ABC):
             prs = None
 
         self.empty_prs = deepcopy(self.presentation)
+        if succ_flag:
+            self.trace_storage.save(trace_id)
+            logger.info("Trace saved: %s (%d actions)", trace_id, len(self.trace_storage.get_trace()))
         return prs, history
 
     async def generate_outline(
@@ -600,6 +607,15 @@ class PPTAgent(PPTGen):
                     edit_slide = repair_slide
                     self.empty_prs.validate(edit_slide)
                     logger.info("Slide %d repair succeeded", edit_slide.slide_idx)
+
+        # Record trace
+        record_slide_action(
+            self.trace_storage,
+            action_type="edit_slide",
+            target_slide=edit_slide.slide_idx,
+            slide=edit_slide,
+            issues=inspection_issues if inspection_issues else None,
+        )
 
         return edit_slide, code_executor
 
