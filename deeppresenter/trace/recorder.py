@@ -56,6 +56,7 @@ def record_slide_action(
     action_type: str,
     target_slide: int,
     slide: "SlidePage",
+    pre_slide: "SlidePage | None" = None,
     issues: list | None = None,
     model: str | None = None,
     token_count: int = 0,
@@ -67,6 +68,7 @@ def record_slide_action(
         action_type: Type of action (edit_slide, generate_slide, etc.).
         target_slide: Target slide index.
         slide: The SlidePage object after the action.
+        pre_slide: Optional SlidePage before the action (for pre_state).
         issues: Optional list of Issue objects from inspection.
         model: Optional model name used.
         token_count: Optional token count.
@@ -85,6 +87,7 @@ def record_slide_action(
         action_id=generate_action_id(),
         action_type=action_type,  # type: ignore
         target_slide=target_slide,
+        pre_state=capture_slide_state(pre_slide) if pre_slide else {},
         post_state=capture_slide_state(slide),
         model=model,
         token_count=token_count,

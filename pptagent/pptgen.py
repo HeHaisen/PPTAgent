@@ -576,8 +576,21 @@ class PPTAgent(PPTGen):
             )
         self.empty_prs.validate(edit_slide)
 
+        # Save pre-repair state for trace
+        pre_repair_slide = deepcopy(edit_slide)
+
         # Visual quality inspection + repair loop (up to 3 iterations)
-        inspection_issues = inspect_slide_structured(edit_slide)
+        inspection_issues = []
+        _vr_enabled = True
+        try:
+            from deeppresenter.utils.config import DeepPresenterConfig
+            _config = DeepPresenterConfig.load_from_file()
+            _vr_enabled = _config.verifiable_reflection.enabled
+        except Exception:
+            pass
+
+        if _vr_enabled:
+            inspection_issues = inspect_slide_structured(edit_slide)
         max_repair_iterations = 3
         for repair_iter in range(max_repair_iterations):
             if not inspection_issues:
@@ -613,12 +626,13 @@ class PPTAgent(PPTGen):
                 logger.warning("Slide %d repair attempt %d failed", edit_slide.slide_idx, repair_iter + 1)
                 break
 
-        # Record trace
+        # Record trace with pre_state
         record_slide_action(
             self.trace_storage,
             action_type="edit_slide",
             target_slide=edit_slide.slide_idx,
             slide=edit_slide,
+            pre_slide=pre_repair_slide,
             issues=inspection_issues if inspection_issues else None,
         )
 

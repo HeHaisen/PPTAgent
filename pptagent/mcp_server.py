@@ -909,19 +909,25 @@ class PPTAgentServer(PPTAgent):
 
         @self.mcp.tool()
         async def repair_slide(slide_index: int) -> dict:
-            """Trigger a repair loop for a slide with visual quality issues.
+            """Repair a slide with visual quality issues.
+
+            Inspects the slide, and if errors are found, uses the coder agent
+            to generate and execute repair actions. Re-inspects after repair.
 
             Args:
                 slide_index: The 0-based index of the slide to repair.
 
             Returns:
-                dict: Repair results with success status and remaining violations.
+                dict: Repair results with success status, repaired violations,
+                      and any remaining issues.
             """
+            from pptagent.apis import API_TYPES, CodeExecutor
             from deeppresenter.tools.reflect import inspect_slide_structured
+            from deeppresenter.trace.recorder import record_slide_action
             from deeppresenter.trace.repair import build_repair_feedback
 
             if not self.slides or slide_index >= len(self.slides):
-                return {"error": f"Slide index {slide_index} out of range"}
+                return {"error": f"Slide index {slide_index} out of range (0-{len(self.slides) - 1})"}
 
             slide = self.slides[slide_index]
             issues = inspect_slide_structured(slide)
@@ -934,14 +940,73 @@ class PPTAgentServer(PPTAgent):
                     "warnings": [i.message for i in issues if i.severity == "warning"],
                 }
 
-            # Attempt repair via coder agent (simplified - uses existing slide context)
+            # Build repair feedback with rule-based suggestions
             feedback_msg = build_repair_feedback(errors)
-            return {
-                "success": False,
-                "message": f"Found {len(errors)} errors. Repair feedback generated.",
-                "feedback": feedback_msg,
-                "errors": [e.message for e in errors],
-            }
+            error_summary = "; ".join(e.message for e in errors[:3])
+            logger.info("Repairing slide %d: %s", slide_index, error_summary)
+
+            # Use coder agent to generate repair actions
+            code_executor = CodeExecutor(self.retry_times)
+            try:
+                slide_html = slide.to_html()
+                _, repair_actions = await self.staffs["coder"](
+                    api_docs=code_executor.get_apis_docs(API_TYPES.Agent.value),
+                    edit_target=slide_html,
+                    command_list=f"Repair the following visual quality issues:\n{feedback_msg}",
+                )
+            except Exception as e:
+                logger.error("Repair code generation failed for slide %d: %s", slide_index, e)
+                return {
+                    "success": False,
+                    "message": f"Repair code generation failed: {e}",
+                    "errors": [err.message for err in errors],
+                }
+
+            # Execute repair actions on a copy
+            repair_slide = deepcopy(slide)
+            exec_feedback = code_executor.execute_actions(
+                repair_actions, repair_slide, self.source_doc
+            )
+            if exec_feedback is not None:
+                logger.warning("Repair execution failed for slide %d: %s", slide_index, exec_feedback[1])
+                return {
+                    "success": False,
+                    "message": f"Repair execution failed: {exec_feedback[1]}",
+                    "errors": [err.message for err in errors],
+                }
+
+            # Re-inspect after repair
+            new_issues = inspect_slide_structured(repair_slide)
+            new_errors = [i for i in new_issues if i.severity == "error"]
+
+            if not new_errors:
+                # Repair succeeded - replace the slide
+                self.slides[slide_index] = repair_slide
+                logger.info("Slide %d repair succeeded", slide_index)
+
+                # Record repair_action trace
+                if hasattr(self, "trace_storage"):
+                    record_slide_action(
+                        self.trace_storage,
+                        action_type="repair_action",
+                        target_slide=slide_index,
+                        slide=repair_slide,
+                        issues=new_issues if new_issues else None,
+                    )
+
+                return {
+                    "success": True,
+                    "message": "Repair succeeded",
+                    "remaining_warnings": [i.message for i in new_issues if i.severity == "warning"],
+                }
+            else:
+                logger.warning("Slide %d repair did not resolve all errors", slide_index)
+                return {
+                    "success": False,
+                    "message": f"Repair did not resolve all errors ({len(new_errors)} remaining)",
+                    "original_errors": [e.message for e in errors],
+                    "remaining_errors": [e.message for e in new_errors],
+                }
 
 
 def main():
