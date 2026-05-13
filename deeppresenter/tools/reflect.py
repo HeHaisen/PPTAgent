@@ -4,6 +4,7 @@ import re
 import sys
 import tempfile
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +15,16 @@ from deeppresenter.utils.config import DeepPresenterConfig
 from deeppresenter.utils.log import info, set_logger
 from deeppresenter.utils.webview import PlaywrightConverter, convert_html_to_pptx
 from pptagent.model_utils import _get_lid_model
+
+
+@dataclass
+class Issue:
+    """A single visual quality issue found during inspection."""
+
+    rule_name: str
+    severity: Literal["error", "warning"]
+    message: str
+    element: str = ""
 
 mcp = FastMCP("DeepPresenter")
 CONFIG = DeepPresenterConfig.load_from_file(os.getenv("CONFIG_FILE"))
@@ -130,8 +141,8 @@ def _min_font_rule(selector: str) -> tuple[float, str] | None:
     return 18.0, "正文"
 
 
-def _collect_font_size_issues(html_text: str) -> list[str]:
-    issues: list[str] = []
+def _collect_font_size_issues(html_text: str) -> list[Issue]:
+    issues: list[Issue] = []
     seen: set[tuple[str, int, int]] = set()
 
     def check_rule(selector: str, declarations: str) -> None:
@@ -151,9 +162,12 @@ def _collect_font_size_issues(html_text: str) -> list[str]:
             return
 
         seen.add(dedupe_key)
-        issues.append(
-            f"`{selector}` 的{role}字号只有 {size_px:.1f}px，低于最小可读阈值 {min_px:.0f}px"
-        )
+        issues.append(Issue(
+            rule_name="font_size",
+            severity="error",
+            message=f"`{selector}` 的{role}字号只有 {size_px:.1f}px，低于最小可读阈值 {min_px:.0f}px",
+            element=selector,
+        ))
 
     for style_block in _STYLE_BLOCK_RE.findall(html_text):
         for rule_match in _STYLE_RULE_RE.finditer(style_block):
@@ -178,9 +192,9 @@ def _collect_font_size_issues(html_text: str) -> list[str]:
     return issues
 
 
-def _collect_contrast_issues(html_text: str) -> list[str]:
+def _collect_contrast_issues(html_text: str) -> list[Issue]:
     """Check color contrast between text and background elements."""
-    issues: list[str] = []
+    issues: list[Issue] = []
     seen: set[str] = set()
 
     def check_contrast(selector: str, declarations: str, font_size_px: float = 18.0) -> None:
@@ -198,10 +212,13 @@ def _collect_contrast_issues(html_text: str) -> list[str]:
         if ratio >= min_ratio or key in seen:
             return
         seen.add(key)
-        issues.append(
-            f"`{selector}` 对比度 {ratio:.1f}:1 低于 WCAG AA 标准 ({min_ratio}:1)，"
-            f"前景色 {color_match.group(1)} 与背景色 {bg_match.group(1)}"
-        )
+        issues.append(Issue(
+            rule_name="contrast_ratio",
+            severity="error",
+            message=f"`{selector}` 对比度 {ratio:.1f}:1 低于 WCAG AA 标准 ({min_ratio}:1)，"
+                    f"前景色 {color_match.group(1)} 与背景色 {bg_match.group(1)}",
+            element=selector,
+        ))
 
     for style_block in _STYLE_BLOCK_RE.findall(html_text):
         for rule_match in _STYLE_RULE_RE.finditer(style_block):
@@ -230,9 +247,9 @@ def _collect_contrast_issues(html_text: str) -> list[str]:
     return issues
 
 
-def _format_slide_audit_error(issues: list[str]) -> str:
+def _format_slide_audit_error(issues: list[Issue]) -> str:
     preview = issues[:8]
-    details = "\n".join(f"- {issue}" for issue in preview)
+    details = "\n".join(f"- [{issue.rule_name}] {issue.message}" for issue in preview)
     if len(issues) > len(preview):
         details += f"\n- 另外还有 {len(issues) - len(preview)} 处可读性问题"
     return (
