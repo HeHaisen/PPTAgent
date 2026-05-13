@@ -224,6 +224,13 @@ class PPTGen(ABC):
                 generated_slides.append(slide)
                 code_executors.append(code_executor)
 
+        # Cross-slide visual quality inspection
+        if generated_slides:
+            from deeppresenter.tools.reflect import inspect_slides_structured
+            cross_issues = inspect_slides_structured(generated_slides)
+            for issue in cross_issues:
+                logger.warning("Cross-slide inspection: [%s] %s", issue.rule_name, issue.message)
+
         history = self._collect_history(
             sum(code_executors, start=CodeExecutor(self.retry_times))
         )

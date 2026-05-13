@@ -597,6 +597,67 @@ def inspect_slide_structured(slide: "SlidePage") -> list[Issue]:
     return issues
 
 
+def inspect_slides_structured(slides: "list[SlidePage]") -> list[Issue]:
+    """Inspect multiple slides for cross-slide issues like image distribution.
+
+    Args:
+        slides: A list of SlidePage objects.
+
+    Returns:
+        A list of Issue objects found during cross-slide inspection.
+    """
+    from pptagent.presentation.shapes import Picture
+
+    issues: list[Issue] = []
+    if len(slides) < 2:
+        return issues
+
+    # Collect image positions per slide
+    slide_image_positions: list[list[float]] = []  # list of [left_center, ...] per slide
+    for slide in slides:
+        positions = []
+        for s in slide.shapes:
+            if isinstance(s, Picture) and s.width > 0 and s.height > 0:
+                center_x = s.left + s.width / 2
+                positions.append(center_x)
+        slide_image_positions.append(positions)
+
+    # Check if images are concentrated on one side (80%+ on left or right half)
+    all_positions = [p for positions in slide_image_positions for p in positions]
+    if len(all_positions) >= 3:
+        slide_w = float(slides[0].slide_width)
+        mid = slide_w / 2
+        left_count = sum(1 for p in all_positions if p < mid)
+        right_count = len(all_positions) - left_count
+        total = len(all_positions)
+        if left_count / total > 0.8:
+            issues.append(Issue(
+                rule_name="image_distribution",
+                severity="warning",
+                message=f"图片分布不均: {left_count}/{total} ({left_count/total*100:.0f}%) 图片集中在幻灯片左侧",
+                element="slides",
+            ))
+        elif right_count / total > 0.8:
+            issues.append(Issue(
+                rule_name="image_distribution",
+                severity="warning",
+                message=f"图片分布不均: {right_count}/{total} ({right_count/total*100:.0f}%) 图片集中在幻灯片右侧",
+                element="slides",
+            ))
+
+    # Check if images are clustered on few slides while others have none
+    slides_with_images = sum(1 for positions in slide_image_positions if positions)
+    if slides_with_images > 0 and slides_with_images <= len(slides) // 3:
+        issues.append(Issue(
+            rule_name="image_distribution",
+            severity="warning",
+            message=f"图片分布不均: {len(slides)} 页中仅 {slides_with_images} 页包含图片",
+            element="slides",
+        ))
+
+    return issues
+
+
 def _format_slide_audit_error(issues: list[Issue]) -> str:
     preview = issues[:8]
     details = "\n".join(f"- [{issue.rule_name}] {issue.message}" for issue in preview)
