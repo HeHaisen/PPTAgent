@@ -488,6 +488,11 @@ class PPTAgent(PPTGen):
         self._recent_layouts.append(layout)
         if len(self._recent_layouts) > 3:
             self._recent_layouts = self._recent_layouts[-3:]
+        if len(self._recent_layouts) >= 3 and len(set(self._recent_layouts)) == 1:
+            logger.warning(
+                "Layout repetition: 3+ consecutive slides use layout '%s'",
+                layout,
+            )
         if "image" not in layout and len(images) > 0:
             slide_content = slide_content[: slide_content.rfind("\nImages:\n")]
         return self.layouts[layout], header, slide_content
