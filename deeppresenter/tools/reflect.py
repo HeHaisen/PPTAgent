@@ -6,7 +6,7 @@ import tempfile
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastmcp import FastMCP
 from mcp.types import ImageContent
@@ -15,6 +15,9 @@ from deeppresenter.utils.config import DeepPresenterConfig
 from deeppresenter.utils.log import info, set_logger
 from deeppresenter.utils.webview import PlaywrightConverter, convert_html_to_pptx
 from pptagent.model_utils import _get_lid_model
+
+if TYPE_CHECKING:
+    from pptagent.presentation.presentation import SlidePage
 
 
 @dataclass
@@ -362,6 +365,114 @@ def _collect_margin_issues(html_text: str) -> list[Issue]:
                 message=f"{label} 距离边缘过近: {', '.join(violations)}",
                 element=label,
             ))
+    return issues
+
+
+def inspect_slide_structured(slide: "SlidePage") -> list[Issue]:
+    """Inspect a SlidePage object directly using structured data.
+
+    This bypasses HTML parsing and checks spatial relationships,
+    image properties, and text density using the slide's shape data.
+
+    Args:
+        slide: A SlidePage object with populated shapes.
+
+    Returns:
+        A list of Issue objects found during inspection.
+    """
+    from pptagent.presentation.shapes import Picture
+
+    issues: list[Issue] = []
+    slide_w = float(slide.slide_width)
+    slide_h = float(slide.slide_height)
+    slide_area = slide_w * slide_h
+    margin = 10.0  # pt
+
+    visible_shapes = [
+        s for s in slide.shapes
+        if s.width > 0 and s.height > 0
+    ]
+
+    # 1. Element overlap detection
+    for i in range(len(visible_shapes)):
+        for j in range(i + 1, len(visible_shapes)):
+            a, b = visible_shapes[i], visible_shapes[j]
+            if (
+                a.left < b.left + b.width
+                and a.left + a.width > b.left
+                and a.top < b.top + b.height
+                and a.top + a.height > b.top
+            ):
+                a_name = a.style.get("name", f"shape_{a.shape_idx}")
+                b_name = b.style.get("name", f"shape_{b.shape_idx}")
+                issues.append(Issue(
+                    rule_name="overlap_elements",
+                    severity="warning",
+                    message=f"元素重叠: {a_name} 与 {b_name} 存在位置重叠",
+                    element=f"{a_name}, {b_name}",
+                ))
+
+    # 2. Safe margin detection
+    for s in visible_shapes:
+        name = s.style.get("name", f"shape_{s.shape_idx}")
+        violations = []
+        if s.left < margin:
+            violations.append(f"左边距 {s.left:.0f}pt")
+        if s.top < margin:
+            violations.append(f"上边距 {s.top:.0f}pt")
+        if s.left + s.width > slide_w - margin:
+            violations.append(f"右边距 {slide_w - s.left - s.width:.0f}pt")
+        if s.top + s.height > slide_h - margin:
+            violations.append(f"下边距 {slide_h - s.top - s.height:.0f}pt")
+        if violations:
+            issues.append(Issue(
+                rule_name="safe_margin",
+                severity="warning",
+                message=f"{name} 距离边缘过近: {', '.join(violations)}",
+                element=name,
+            ))
+
+    # 3. Image-specific checks
+    for s in visible_shapes:
+        if not isinstance(s, Picture):
+            continue
+        name = s.style.get("name", f"picture_{s.shape_idx}")
+
+        # 3a. Image too small (< 5% of slide area)
+        ratio = s.area / slide_area
+        if ratio < 0.05:
+            issues.append(Issue(
+                rule_name="image_too_small",
+                severity="warning",
+                message=f"{name} 面积仅占幻灯片的 {ratio*100:.1f}%，可能太小不易辨识",
+                element=name,
+            ))
+
+        # 3b. Image stretch detection (aspect ratio mismatch)
+        # Compare container aspect ratio with a reasonable range
+        container_ratio = s.width / s.height if s.height > 0 else 0
+        if container_ratio > 0 and (container_ratio > 3.0 or container_ratio < 0.33):
+            issues.append(Issue(
+                rule_name="image_stretch",
+                severity="warning",
+                message=f"{name} 宽高比 {container_ratio:.1f}:1 异常，图片可能被拉伸",
+                element=name,
+            ))
+
+    # 4. Text density check
+    text_area = 0.0
+    for s in visible_shapes:
+        if s.text_frame and s.text_frame.text.strip():
+            text_area += s.area
+    text_ratio = text_area / slide_area if slide_area > 0 else 0
+    if text_ratio > 0.6:
+        issues.append(Issue(
+            rule_name="text_density",
+            severity="warning",
+            message=f"文本面积占幻灯片的 {text_ratio*100:.0f}%，密度过高",
+            element="slide",
+        ))
+
     return issues
 
 
