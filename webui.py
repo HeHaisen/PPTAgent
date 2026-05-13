@@ -784,8 +784,8 @@ class UserSession:
 
     @property
     def _sessions_dir(self) -> Path:
-        """Return the sessions directory for this workspace."""
-        return self.loop.workspace / ".sessions"
+        """Return the sessions directory (shared across all workspaces)."""
+        return WORKSPACE_BASE / ".sessions"
 
     @property
     def _session_dir(self) -> Path:
@@ -822,7 +822,7 @@ class UserSession:
     @classmethod
     def load(cls, workspace: Path, session_id: str) -> "UserSession | None":
         """Load a session from disk."""
-        session_dir = workspace / ".sessions" / session_id.replace("/", "_")
+        session_dir = WORKSPACE_BASE / ".sessions" / session_id.replace("/", "_")
         meta_file = session_dir / "session.json"
         if not meta_file.exists():
             return None
@@ -853,8 +853,8 @@ class UserSession:
 
     @staticmethod
     def list_sessions(workspace: Path) -> list[dict]:
-        """List all sessions in a workspace, sorted by last_active desc."""
-        sessions_dir = workspace / ".sessions"
+        """List all sessions, sorted by last_active desc."""
+        sessions_dir = WORKSPACE_BASE / ".sessions"
         if not sessions_dir.exists():
             return []
 
