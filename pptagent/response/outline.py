@@ -47,10 +47,11 @@ class OutlineItem(BaseModel):
         content = ""
         for subsection in subsections:
             content += f"Paragraph: {subsection.title}\nContent: {subsection.content}\n"
-        images = [
-            f"<image>{path}</image>: {document.find_media(path=path).caption}"
-            for path in self.images
-        ]
+        images = []
+        for path in self.images:
+            media = document.find_media(path=path)
+            img_type = media.infer_type()
+            images.append(f"<image>{path}</image>: [{img_type}] {media.caption}")
         return header, content, images
 
     @classmethod

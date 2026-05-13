@@ -35,6 +35,9 @@ IMAGE_CAPTION_PROMPT = env.from_string(
 logger = get_logger(__name__)
 
 
+_IMAGE_TYPES = {"Table", "Chart", "Landscape", "Diagram", "Banner", "Background", "Icon", "Logo", "Picture"}
+
+
 class Media(BaseModel):
     markdown_content: str
     near_chunks: tuple[str, str]
@@ -45,6 +48,14 @@ class Media(BaseModel):
     def size(self):
         assert self.path is not None, "Path is required to get size"
         return Image.open(self.path).size
+
+    def infer_type(self) -> str:
+        """Extract image type from caption prefix (e.g. 'Chart: ...' -> 'Chart')."""
+        if self.caption and ":" in self.caption:
+            prefix = self.caption.split(":")[0].strip()
+            if prefix in _IMAGE_TYPES:
+                return prefix
+        return "Picture"
 
     def parse(self, image_dir: str):
         """
