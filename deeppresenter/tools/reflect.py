@@ -368,6 +368,127 @@ def _collect_margin_issues(html_text: str) -> list[Issue]:
     return issues
 
 
+def _collect_overflow_text_issues(html_text: str) -> list[Issue]:
+    """Detect text elements that may overflow their containers."""
+    issues: list[Issue] = []
+
+    body_match = _SLIDE_BODY_RE.search(html_text)
+    if not body_match:
+        return issues
+    slide_w = float(body_match.group(1))
+    slide_h = float(body_match.group(3))
+    unit = body_match.group(2)
+    if unit.lower() != "pt":
+        slide_w = slide_w * 72 / 96
+        slide_h = slide_h * 72 / 96
+
+    # Collect CSS rules with explicit width
+    class_widths: dict[str, float] = {}
+    class_font_sizes: dict[str, float] = {}
+    for style_block in _STYLE_BLOCK_RE.findall(html_text):
+        for rule_match in _STYLE_RULE_RE.finditer(style_block):
+            declarations = rule_match.group("declarations")
+            selectors = [s.strip() for s in rule_match.group("selectors").split(",")]
+            width_match = re.search(r"width\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(px|pt)", declarations, re.IGNORECASE)
+            font_match = _FONT_SIZE_RE.search(declarations)
+            for selector in selectors:
+                cls = selector.strip().lstrip(".")
+                if cls and width_match:
+                    w = float(width_match.group(1))
+                    if width_match.group(2).lower() != "pt":
+                        w = w * 72 / 96
+                    class_widths[cls] = w
+                if cls and font_match:
+                    fs = _to_px(float(font_match.group(1)), font_match.group(2))
+                    class_font_sizes[cls] = fs
+
+    # Check text elements with known container widths
+    text_content_re = re.compile(r">(.*?)<", re.DOTALL)
+    element_re = re.compile(
+        r"<(?P<tag>p|span|li|h[1-6]|div)(?P<attrs>[^>]*)>(?P<content>.*?)</(?P=tag)>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for m in element_re.finditer(html_text):
+        tag = m.group("tag").lower()
+        attrs = m.group("attrs")
+        content = re.sub(r"<[^>]+>", "", m.group("content")).strip()
+        if not content:
+            continue
+        class_match = _CLASS_ATTR_RE.search(attrs)
+        if not class_match:
+            continue
+        classes = class_match.group("classes").split()
+        container_w = None
+        font_px = 18.0
+        for cls in classes:
+            if cls in class_widths:
+                container_w = class_widths[cls]
+            if cls in class_font_sizes:
+                font_px = class_font_sizes[cls]
+        if container_w is None:
+            continue
+        # Estimate: CJK chars ~1em wide, Latin ~0.5em, use 0.8em as average
+        cjk_count = sum(1 for c in content if "一" <= c <= "鿿")
+        latin_count = len(content) - cjk_count
+        estimated_width = (cjk_count * font_px + latin_count * font_px * 0.5)
+        if estimated_width > container_w * 1.2:
+            label = f"<{tag}>.{ '.'.join(classes)}"
+            issues.append(Issue(
+                rule_name="overflow_text",
+                severity="error",
+                message=f"{label} 文本可能溢出容器: 预估文本宽度 {estimated_width:.0f}px > 容器宽度 {container_w:.0f}px",
+                element=label,
+            ))
+    return issues
+
+
+def _collect_overflow_image_issues(html_text: str) -> list[Issue]:
+    """Detect images that extend beyond the slide body boundaries."""
+    issues: list[Issue] = []
+
+    body_match = _SLIDE_BODY_RE.search(html_text)
+    if not body_match:
+        return issues
+    slide_w = float(body_match.group(1))
+    slide_h = float(body_match.group(3))
+    unit = body_match.group(2)
+    if unit.lower() != "pt":
+        slide_w = slide_w * 72 / 96
+        slide_h = slide_h * 72 / 96
+
+    img_re = re.compile(r"<img(?P<attrs>[^>]*)/?>", re.IGNORECASE | re.DOTALL)
+    for m in img_re.finditer(html_text):
+        attrs = m.group("attrs")
+        style_match = re.search(r"style\s*=\s*['\"]([^'\"]+)['\"]", attrs, re.IGNORECASE)
+        if not style_match:
+            continue
+        style = style_match.group(1)
+        bounds = _parse_bounds(style)
+        if bounds is None:
+            continue
+        violations = []
+        if bounds["left"] + bounds["width"] > slide_w + 1:
+            violations.append(f"右侧溢出 {bounds['left'] + bounds['width'] - slide_w:.0f}pt")
+        if bounds["top"] + bounds["height"] > slide_h + 1:
+            violations.append(f"底部溢出 {bounds['top'] + bounds['height'] - slide_h:.0f}pt")
+        if bounds["left"] < -1:
+            violations.append(f"左侧溢出 {-bounds['left']:.0f}pt")
+        if bounds["top"] < -1:
+            violations.append(f"顶部溢出 {-bounds['top']:.0f}pt")
+        if violations:
+            class_match = _CLASS_ATTR_RE.search(attrs)
+            label = "<img>"
+            if class_match:
+                label += f".{'.'.join(class_match.group('classes').split())}"
+            issues.append(Issue(
+                rule_name="overflow_image",
+                severity="error",
+                message=f"{label} 超出幻灯片边界: {', '.join(violations)}",
+                element=label,
+            ))
+    return issues
+
+
 def inspect_slide_structured(slide: "SlidePage") -> list[Issue]:
     """Inspect a SlidePage object directly using structured data.
 
@@ -511,6 +632,8 @@ async def inspect_slide(
     all_issues.extend(_collect_contrast_issues(html_text))
     all_issues.extend(_collect_overlap_issues(html_text))
     all_issues.extend(_collect_margin_issues(html_text))
+    all_issues.extend(_collect_overflow_text_issues(html_text))
+    all_issues.extend(_collect_overflow_image_issues(html_text))
 
     errors = [i for i in all_issues if i.severity == "error"]
     if errors:
