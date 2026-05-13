@@ -842,6 +842,107 @@ class PPTAgentServer(PPTAgent):
                 output["preview_pptx_path"] = preview_pptx_path
             return output
 
+        @self.mcp.tool()
+        async def verify_slide(slide_index: int) -> dict:
+            """Verify a slide's visual quality using rule-based inspection.
+
+            Args:
+                slide_index: The 0-based index of the slide to verify.
+
+            Returns:
+                dict: Verification results with violations, has_errors, has_warnings.
+            """
+            from deeppresenter.rules import RuleEngine
+            from deeppresenter.tools.reflect import inspect_slide_structured
+
+            if not self.slides or slide_index >= len(self.slides):
+                return {"error": f"Slide index {slide_index} out of range (0-{len(self.slides) - 1 if self.slides else 0})"}
+
+            slide = self.slides[slide_index]
+            issues = inspect_slide_structured(slide)
+
+            violations = [
+                {
+                    "rule_name": i.rule_name,
+                    "severity": i.severity,
+                    "message": i.message,
+                    "element": i.element,
+                }
+                for i in issues
+            ]
+            has_errors = any(i.severity == "error" for i in issues)
+            has_warnings = any(i.severity == "warning" for i in issues)
+
+            return {
+                "slide_index": slide_index,
+                "violations": violations,
+                "has_errors": has_errors,
+                "has_warnings": has_warnings,
+                "can_proceed": not has_errors,
+            }
+
+        @self.mcp.tool()
+        def get_trace(action_id: str = None) -> dict:
+            """Get the action trace for the current session.
+
+            Args:
+                action_id: Optional specific action ID to retrieve.
+                    If None, returns the full trace.
+
+            Returns:
+                dict: Trace data with actions and statistics.
+            """
+            if not hasattr(self, "trace_storage"):
+                return {"error": "No trace storage available"}
+
+            if action_id:
+                entry = self.trace_storage.get_action(action_id)
+                if entry:
+                    return entry.to_dict()
+                return {"error": f"Action {action_id} not found"}
+
+            trace = self.trace_storage.get_trace()
+            return {
+                "actions": [e.to_dict() for e in trace],
+                "stats": self.trace_storage._compute_stats(),
+            }
+
+        @self.mcp.tool()
+        async def repair_slide(slide_index: int) -> dict:
+            """Trigger a repair loop for a slide with visual quality issues.
+
+            Args:
+                slide_index: The 0-based index of the slide to repair.
+
+            Returns:
+                dict: Repair results with success status and remaining violations.
+            """
+            from deeppresenter.tools.reflect import inspect_slide_structured
+            from deeppresenter.trace.repair import build_repair_feedback
+
+            if not self.slides or slide_index >= len(self.slides):
+                return {"error": f"Slide index {slide_index} out of range"}
+
+            slide = self.slides[slide_index]
+            issues = inspect_slide_structured(slide)
+            errors = [i for i in issues if i.severity == "error"]
+
+            if not errors:
+                return {
+                    "success": True,
+                    "message": "No errors found, slide passes inspection",
+                    "warnings": [i.message for i in issues if i.severity == "warning"],
+                }
+
+            # Attempt repair via coder agent (simplified - uses existing slide context)
+            feedback_msg = build_repair_feedback(errors)
+            return {
+                "success": False,
+                "message": f"Found {len(errors)} errors. Repair feedback generated.",
+                "feedback": feedback_msg,
+                "errors": [e.message for e in errors],
+            }
+
 
 def main():
     server = PPTAgentServer()
