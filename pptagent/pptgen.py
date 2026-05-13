@@ -459,7 +459,7 @@ class PPTAgent(PPTGen):
                 command_list, template_id = await self._generate_content(
                     layout, slide_content, header, slide_idx, total_slides
                 )
-                slide, code_executor = await self._edit_slide(command_list, template_id)
+                slide, code_executor, _ = await self._edit_slide(command_list, template_id)
             except Exception as e:
                 logger.error(f"Failed to generate slide {slide_idx}, error: {e}")
                 traceback.print_exc()
@@ -540,18 +540,22 @@ class PPTAgent(PPTGen):
         return command_list, template_id
 
     async def _edit_slide(
-        self, command_list: list, template_id: int
+        self, command_list: list, template_id: int, cached_edit_actions: list | None = None
     ) -> tuple[SlidePage, CodeExecutor]:
         """
         Asynchronously edit the slide.
         """
         code_executor = CodeExecutor(self.retry_times)
         code_executor.command_history.append(command_list)
-        turn_id, edit_actions = await self.staffs["coder"](
-            api_docs=code_executor.get_apis_docs(API_TYPES.Agent.value),
-            edit_target=self.presentation.slides[template_id - 1].to_html(),
-            command_list="\n".join([str(i) for i in command_list]),
-        )
+        if cached_edit_actions:
+            edit_actions = cached_edit_actions
+            turn_id = None
+        else:
+            turn_id, edit_actions = await self.staffs["coder"](
+                api_docs=code_executor.get_apis_docs(API_TYPES.Agent.value),
+                edit_target=self.presentation.slides[template_id - 1].to_html(),
+                command_list="\n".join([str(i) for i in command_list]),
+            )
 
         for error_idx in range(self.retry_times):
             edit_slide: SlidePage = deepcopy(self.presentation.slides[template_id - 1])
@@ -571,9 +575,18 @@ class PPTAgent(PPTGen):
                 raise Exception(
                     f"Failed to generate slide, tried too many times at editing\ntraceback: {feedback[1]}"
                 )
-            edit_actions = await self.staffs["coder"].retry(
-                feedback[0], feedback[1], turn_id, error_idx + 1
-            )
+            # If cached actions failed, fall back to LLM
+            if turn_id is None:
+                logger.info("Cached edit actions failed, falling back to LLM")
+                turn_id, edit_actions = await self.staffs["coder"](
+                    api_docs=code_executor.get_apis_docs(API_TYPES.Agent.value),
+                    edit_target=self.presentation.slides[template_id - 1].to_html(),
+                    command_list="\n".join([str(i) for i in command_list]),
+                )
+            else:
+                edit_actions = await self.staffs["coder"].retry(
+                    feedback[0], feedback[1], turn_id, error_idx + 1
+                )
         self.empty_prs.validate(edit_slide)
 
         # Save pre-repair state for trace
@@ -636,7 +649,7 @@ class PPTAgent(PPTGen):
             issues=inspection_issues if inspection_issues else None,
         )
 
-        return edit_slide, code_executor
+        return edit_slide, code_executor, edit_actions
 
     async def _validate_content(
         self, editor_output: EditorOutput, layout: Layout, turn_id: int, retry: int = 0

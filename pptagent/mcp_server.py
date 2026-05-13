@@ -115,6 +115,7 @@ class PPTAgentServer(PPTAgent):
         self.direct_edit_next_layout_idx = 0
         self.generated_slides_by_template_id: dict[int, object] = {}
         self._slide_cache: list[dict] = []
+        self._current_template: str | None = None
         model_name, api_base, api_key = self._resolve_model_endpoint()
         model = AsyncLLM(model_name, api_base, api_key)
         workspace = os.getenv("WORKSPACE", None)
@@ -250,12 +251,12 @@ class PPTAgentServer(PPTAgent):
         return str(self.preview_pptx_path.resolve())
 
     async def _build_single_slide(
-        self, layout: str, elements: list[dict]
+        self, layout: str, elements: list[dict], cached_edit_actions: list | None = None
     ) -> tuple:
         """I/O-bound: validate, generate commands, and edit slide. No shared state mutation.
 
         Returns:
-            tuple: (slide, template_id, warnings, layout_name)
+            tuple: (slide, template_id, warnings, layout_name, edit_actions)
         """
         assert self._initialized, (
             "PPTAgent not initialized, please call `set_template` first"
@@ -281,11 +282,19 @@ class PPTAgentServer(PPTAgent):
         command_list, template_id = self._generate_commands(
             editor_output, layout_obj
         )
-        slide, _ = await self._edit_slide(command_list, template_id)
-        return slide, template_id, warnings, layout
+        slide, code_executor, edit_actions = await self._edit_slide(command_list, template_id, cached_edit_actions)
+        return slide, template_id, warnings, layout, edit_actions
+
+    def _save_partial_cache(self):
+        """Save current slide cache to disk for resume capability."""
+        cache_path = Path(".pptagent_partial_cache.json")
+        cache_path.write_text(
+            json.dumps(self._slide_cache, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     async def _generate_single_slide(
-        self, layout: str, elements: list[dict]
+        self, layout: str, elements: list[dict], cached_edit_actions: list | None = None
     ) -> dict:
         """Internal: validate, generate, and commit one slide to shared state."""
         if self.direct_edit_mode:
@@ -302,8 +311,8 @@ class PPTAgentServer(PPTAgent):
                     f"Expected `{expected_layout}`, got `{layout}`."
                 )
 
-        slide, template_id, warnings, _ = await self._build_single_slide(
-            layout, elements
+        slide, template_id, warnings, _, edit_actions = await self._build_single_slide(
+            layout, elements, cached_edit_actions
         )
 
         self.slides.append(slide)
@@ -313,7 +322,9 @@ class PPTAgentServer(PPTAgent):
             "layout": layout,
             "content": {e["name"]: e["data"] for e in elements},
             "template_id": template_id,
+            "edit_actions": edit_actions,
         })
+        self._save_partial_cache()
         if self.direct_edit_mode:
             self.generated_slides_by_template_id[template_id] = slide
             self.direct_edit_next_layout_idx += 1
@@ -382,6 +393,7 @@ class PPTAgentServer(PPTAgent):
             )
 
             template_data = self._load_template(template_name)
+            self._current_template = template_name
             self._reset_generation_state()
             self.direct_edit_mode = bool(
                 template_data.get("metadata", {}).get("direct_edit")
@@ -524,7 +536,7 @@ class PPTAgentServer(PPTAgent):
             command_list, template_id = self._generate_commands(
                 self.editor_output, self.layout
             )
-            slide, _ = await self._edit_slide(command_list, template_id)
+            slide, code_executor, edit_actions = await self._edit_slide(command_list, template_id)
 
             # Cache slide data for incremental regeneration
             self._slide_cache.append({
@@ -534,7 +546,9 @@ class PPTAgentServer(PPTAgent):
                     el.name: el.data for el in self.editor_output.elements
                 },
                 "template_id": template_id,
+                "edit_actions": edit_actions,
             })
+            self._save_partial_cache()
 
             # Reset state after successful generation
             self.layout = None
@@ -642,7 +656,7 @@ class PPTAgentServer(PPTAgent):
                         errors.append(f"Slide {idx} (layout={layout}): {outcome}")
                         logger.warning(f"Batch slide {idx} failed: {outcome}")
                         continue
-                    slide, template_id, warnings, _ = outcome
+                    slide, template_id, warnings, _, edit_actions = outcome
                     self.slides.append(slide)
                     # Cache slide data for incremental regeneration
                     self._slide_cache.append({
@@ -650,7 +664,9 @@ class PPTAgentServer(PPTAgent):
                         "layout": layout,
                         "content": {e["name"]: e["data"] for e in elements},
                         "template_id": template_id,
+                        "edit_actions": edit_actions,
                     })
+                    self._save_partial_cache()
                     slide_number = len(self.slides)
                     result = {
                         "slide_number": slide_number,
@@ -806,15 +822,18 @@ class PPTAgentServer(PPTAgent):
                         errors.append(f"Slide {idx}: {e}")
                         logger.warning(f"Incremental slide {idx} failed: {e}")
                 else:
-                    # Reuse cached slide
+                    # Reuse cached slide (skip LLM if edit_actions are cached)
                     cached = cached_slides[idx]
                     layout = cached["layout"]
                     elements = [
                         {"name": name, "data": data}
                         for name, data in cached["content"].items()
                     ]
+                    cached_actions = cached.get("edit_actions")
                     try:
-                        result = await self._generate_single_slide(layout, elements)
+                        result = await self._generate_single_slide(
+                            layout, elements, cached_edit_actions=cached_actions
+                        )
                         result["reused_cache"] = True
                         results.append(result)
                     except Exception as e:
@@ -831,6 +850,193 @@ class PPTAgentServer(PPTAgent):
             output = {
                 "message": f"Incremental: {len(results)}/{total_slides} slides generated, {len(errors)} errors",
                 "slides_generated": len(results),
+                "slides_failed": len(errors),
+                "total_slides": len(self.slides),
+            }
+            if results:
+                output["results"] = results
+            if errors:
+                output["errors"] = errors
+            if preview_pptx_path:
+                output["preview_pptx_path"] = preview_pptx_path
+            return output
+
+        @self.mcp.tool()
+        async def generate_slides_resume(slides: list[dict], cache_path: str = ""):
+            """Resume slide generation from a partial cache, skipping already-generated slides.
+
+            Use this when a previous generate_slides_batch was interrupted and you want
+            to continue from where it left off, reusing cached slides to save tokens.
+
+            Args:
+                slides: Full list of slide specifications (same as generate_slides_batch).
+                    Each contains "layout" and "elements". Slides matching the cache
+                    will be restored without LLM calls; only missing slides are generated.
+                cache_path: Path to the .pptagent_partial_cache.json file.
+                    If empty, searches the workspace for the most recent one.
+
+            Returns:
+                dict: Summary with restored/generated slide counts and results.
+            """
+            # 1. Load partial cache
+            cache_file = Path(cache_path) if cache_path else None
+            if not cache_file or not cache_file.exists():
+                cache_file = Path(".pptagent_partial_cache.json")
+            if not cache_file.exists():
+                # No cache found, fall back to full generation
+                logger.info("No partial cache found, falling back to generate_slides_batch")
+                return await generate_slides_batch(slides)
+
+            cached_entries = json.loads(cache_file.read_text(encoding="utf-8"))
+            if not cached_entries:
+                return await generate_slides_batch(slides)
+
+            logger.info(f"Resuming from partial cache: {len(cached_entries)} cached slides")
+
+            # 2. Reset state
+            self._reset_generation_state()
+
+            # 3. Re-initialize template (must be set before resume)
+            assert self._current_template, (
+                "No template set. Call set_template before generate_slides_resume."
+            )
+            template_data = self._load_template(self._current_template)
+            self.direct_edit_mode = bool(
+                template_data.get("metadata", {}).get("direct_edit")
+            )
+            self.set_reference(
+                slide_induction=deepcopy(template_data["slide_induction"]),
+                presentation=template_data["presentation"],
+                hide_small_pic_ratio=None if self.direct_edit_mode else 0.2,
+            )
+            if self.direct_edit_mode:
+                ordered_layouts = sorted(
+                    self.layouts.values(),
+                    key=lambda item: item.template_id,
+                )
+                self.direct_edit_layout_order = [layout.title for layout in ordered_layouts]
+
+            # 4. Build cache lookup
+            cache_by_index = {e["index"]: e for e in cached_entries}
+
+            results = []
+            errors = []
+            restored_count = 0
+            generated_count = 0
+
+            if self.direct_edit_mode:
+                # Sequential: iterate in order, restore cached or generate missing
+                for idx, slide_spec in enumerate(slides):
+                    layout = slide_spec.get("layout")
+                    elements = slide_spec.get("elements", [])
+                    if not layout:
+                        errors.append(f"Slide {idx}: missing 'layout' field")
+                        continue
+
+                    cached = cache_by_index.get(idx)
+                    if cached and cached.get("layout") == layout and cached.get("edit_actions"):
+                        # Restore from cache — skip LLM call
+                        try:
+                            result = await self._generate_single_slide(
+                                layout, elements, cached_edit_actions=cached["edit_actions"]
+                            )
+                            result["restored_from_cache"] = True
+                            results.append(result)
+                            restored_count += 1
+                        except Exception as e:
+                            logger.warning(f"Cache restore failed for slide {idx}, regenerating: {e}")
+                            try:
+                                result = await self._generate_single_slide(layout, elements)
+                                result["regenerated"] = True
+                                results.append(result)
+                                generated_count += 1
+                            except Exception as e2:
+                                errors.append(f"Slide {idx} (layout={layout}): {e2}")
+                    else:
+                        # Generate fresh
+                        try:
+                            result = await self._generate_single_slide(layout, elements)
+                            result["generated_fresh"] = True
+                            results.append(result)
+                            generated_count += 1
+                        except Exception as e:
+                            errors.append(f"Slide {idx} (layout={layout}): {e}")
+                            logger.warning(f"Resume slide {idx} failed: {e}")
+            else:
+                # Non-direct-edit: restore cached slides, generate missing concurrently
+                missing_specs = []
+                for idx, slide_spec in enumerate(slides):
+                    layout = slide_spec.get("layout")
+                    elements = slide_spec.get("elements", [])
+                    if not layout:
+                        errors.append(f"Slide {idx}: missing 'layout' field")
+                        continue
+
+                    cached = cache_by_index.get(idx)
+                    if cached and cached.get("layout") == layout and cached.get("edit_actions"):
+                        # Restore from cache
+                        try:
+                            result = await self._generate_single_slide(
+                                layout, elements, cached_edit_actions=cached["edit_actions"]
+                            )
+                            result["restored_from_cache"] = True
+                            results.append(result)
+                            restored_count += 1
+                        except Exception as e:
+                            logger.warning(f"Cache restore failed for slide {idx}, queuing for regeneration: {e}")
+                            missing_specs.append((idx, layout, elements))
+                    else:
+                        missing_specs.append((idx, layout, elements))
+
+                # Generate missing slides concurrently
+                if missing_specs:
+                    coros = [
+                        self._build_single_slide(layout, elements)
+                        for _, layout, elements in missing_specs
+                    ]
+                    gathered = await asyncio.gather(*coros, return_exceptions=True)
+
+                    for (idx, layout, elements), outcome in zip(missing_specs, gathered):
+                        if isinstance(outcome, Exception):
+                            errors.append(f"Slide {idx} (layout={layout}): {outcome}")
+                            logger.warning(f"Resume slide {idx} failed: {outcome}")
+                            continue
+                        slide, template_id, warnings, _, edit_actions = outcome
+                        self.slides.append(slide)
+                        self._slide_cache.append({
+                            "index": len(self.slides) - 1,
+                            "layout": layout,
+                            "content": {e["name"]: e["data"] for e in elements},
+                            "template_id": template_id,
+                            "edit_actions": edit_actions,
+                        })
+                        self._save_partial_cache()
+                        if self.direct_edit_mode:
+                            self.generated_slides_by_template_id[template_id] = slide
+                            self.direct_edit_next_layout_idx += 1
+                        slide_number = len(self.slides)
+                        result = {
+                            "slide_number": slide_number,
+                            "layout": layout,
+                            "success": True,
+                            "generated_fresh": True,
+                        }
+                        if warnings:
+                            result["warnings"] = warnings
+                        results.append(result)
+                        generated_count += 1
+
+            # Save preview
+            preview_pptx_path = None
+            try:
+                preview_pptx_path = self._save_live_preview_snapshot()
+            except Exception as e:
+                logger.warning(f"Failed to save preview after resume: {e}")
+
+            output = {
+                "message": f"Resume: {restored_count} restored from cache, {generated_count} generated fresh, {len(errors)} errors",
+                "slides_restored": restored_count,
+                "slides_generated": generated_count,
                 "slides_failed": len(errors),
                 "total_slides": len(self.slides),
             }

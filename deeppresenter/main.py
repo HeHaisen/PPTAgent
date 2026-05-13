@@ -101,6 +101,27 @@ class AgentLoop:
                 hello_message += " [Offline Mode]"
             debug(hello_message)
             yield ChatMessage(role=Role.SYSTEM, content=hello_message)
+
+            # Resume mode: skip everything if a complete PPTX already exists
+            is_resume = bool(request.extra_info.get("resume"))
+            if is_resume:
+                existing_pptx = None
+                for f in sorted(self.workspace.glob("*.pptx"), key=lambda f: f.stat().st_mtime, reverse=True):
+                    if f.name.startswith(".") or f.name.startswith("live_preview"):
+                        continue
+                    existing_pptx = f
+                    break
+                if existing_pptx:
+                    self.intermediate_output["final"] = existing_pptx
+                    self.intermediate_output["pptx"] = existing_pptx
+                    self.save_results()
+                    yield ChatMessage(
+                        role=Role.SYSTEM,
+                        content=f"检测到已有 PPTX: {existing_pptx.name}，跳过生成阶段。",
+                    )
+                    yield str(existing_pptx)
+                    return
+
             self.research_agent = Research(
                 self.config,
                 agent_env,
