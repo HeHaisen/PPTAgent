@@ -3,18 +3,25 @@ template: |
   Task: Generate engaging slide content based on the provided schema and reference materials.
 
   Requirements:
-  1. Element Quantity:
+  1. Image Usage:
+    - Select images that best explain the slide's core conclusion; if multiple images are available, choose the one most relevant to the page's main insight.
+    - [Icon]/[Logo] images must NOT be placed in the main visual slot; they are only suitable as supporting or decorative elements.
+    - [Chart]/[Diagram]/[Table] images must be accompanied by explanatory text that helps the audience understand the data conclusion.
+    - [Hero]/[Banner]/[Background] images: keep accompanying text concise to avoid information overload on visual-dominant layouts.
+    - If an image is low quality, weakly related to the content, or its type does not match the slide's purpose, do not use it — leave the image element empty rather than forcing a poor fit.
+    - When multiple images are used on the same slide, ensure they are visually consistent (similar style and color tone).
+  2. Element Quantity:
     - Make best effort to generate suitable content for each element, especially for important elements like titles and main content, only delete them when no proper content can be generated.
     - For any element, aim to generate the same quantity of content as specified by the default_quantity, unless there is completely insufficient suitable content available (e.g., when 2 images are needed but only 1 is provided in the source material).
     - For element with `default_quantity>1`, you can generate the more content than the default_quantity if necessary.
 
-  2. Content Extraction and Refinement
+  3. Content Extraction and Refinement
     - Rewrite content from reference text for each schema element, ensuring accurate meaning and semantic consistency. Try to use vocabulary from the provided materials to ensure consistency.
     - You can use common abbreviations (e.g., etc., et al., TOC, LLM) for brevity where appropriate, but **do not invent new abbreviations** or fabricate information not present in the source material.
     - Rewrite the content to the language specified in the input, **while preserving ambiguous terms (such as names of entities and abbreviations) in their original language** for precision.
     - Strictly adhere to the character limits (`suggested_characters`) in the schema for each element.
 
-  3. Coherence and Flow
+  4. Coherence and Flow
     - This is {{slide_position}}. Ensure the content logically connects with the preceding and following slides as shown in the outline.
     - Maintain consistent terminology, tone, and level of detail across the presentation.
     - If this is the first content slide, provide an appropriate introduction; if it is the last, provide a conclusion or summary.
