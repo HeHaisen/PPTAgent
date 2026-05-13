@@ -13,13 +13,19 @@ template: |
     Content Fit: Evaluate whether the layout’s number of elements matches the input, whether the text length and element length are appropriate, and whether the layout name aligns with the theme.
     Image Fit: Assess the relevance of the images to the theme and their enhancement to the content; if highly relevant and beneficial, prioritize layouts with images; if relevance is low or text dominates, a text-only layout may be chosen.
     If no images are provided, use the text-only layout.
+    Image Type Matching (each image is tagged with a type in brackets):
+      - [Chart]/[Diagram]/[Table]: These are data-driven visuals. Prefer layouts with a large image slot and minimal text; the image should serve as the main visual that explains the core conclusion.
+      - [Hero]/[Banner]/[Background]: These are visual-dominant assets. Best suited for opening slides, section dividers, summary slides, or visually-led pages. Ensure the layout has sufficient text space alongside the image.
+      - [Icon]/[Logo]: These are small auxiliary visuals. They must NOT occupy the main visual slot. Only use them in layouts where they serve as supporting elements (e.g., alongside text or as small decorative elements).
+      - [Landscape]/[Picture]: These are general-purpose images. They can serve as main or supporting visuals depending on relevance.
+      - Multi-image layouts: Only select when the images are visually consistent (similar style, color tone) and informationally complementary. Otherwise, prefer single-main-image layouts.
   - Output:
     - Layout name.
     - Detailed Reasoning: Analyze the fit between the layout and content (element count, text length, theme alignment) and the fit between images and content (relevance and enhancement), explaining why this layout was chosen and whether images are used.
 
   Example Output:
   {
-      "reasoning": "The current slide is Slide 2, themed \"team introduction,\" with the goal of showcasing team members and their backgrounds. The text (50 characters) is concise and close to the middle of the Image-Text layout's character range (30-100), making it suitable for summarizing team details. The provided team photo is highly relevant to the theme, offering a visual representation of the team that significantly enhances audience understanding and engagement, aligning with the rule to prioritize image-inclusive layouts when applicable. The Image-Text layout, with 1 image slot and 1 text slot, perfectly matches the input needs. In contrast, Opening:Text (100-300 characters) is better suited for a text-heavy opening slide, while Stage Analysis (2 images, 1 text) is excessive for a single image and short text, making Image-Text the optimal choice.",
+      "reasoning": "The current slide is Slide 2, themed \"team introduction,\" with the goal of showcasing team members and their backgrounds. The text (50 characters) is concise and close to the middle of the Image-Text layout's character range (30-100), making it suitable for summarizing team details. The provided [Picture] team photo is highly relevant to the theme, offering a visual representation of the team that significantly enhances audience understanding and engagement. As a general-purpose image, it can serve as a main visual. The Image-Text layout, with 1 image slot and 1 text slot, perfectly matches the input needs. In contrast, Opening:Text (100-300 characters) is better suited for a text-heavy opening slide, while Stage Analysis (2 images, 1 text) is excessive for a single image and short text, making Image-Text the optimal choice.",
       "layout": "Image-Text"
   }
 
