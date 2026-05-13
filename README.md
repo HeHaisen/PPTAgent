@@ -49,7 +49,7 @@
 | **PPTAgent Agent** | 模板驱动幻灯片生成 | 分析参考 PPTX 布局结构、根据手稿编排内容、调用 MCP 工具逐页/批量生成 |
 | **Design Agent** | 自由视觉设计 | HTML/CSS 幻灯片设计、反思式布局校验、`inspect_slide` 工具验证可读性与溢出 |
 
-### MCP 工具生态（7 个 Server，20+ 工具）
+### MCP 工具生态（7 个 Server，25+ 工具）
 
 | MCP Server | 提供工具 |
 |------------|---------|
@@ -59,7 +59,7 @@
 | `task` | Todo 管理与 `finalize` 终止信号 |
 | `deeppresenter` | `inspect_manuscript`, `inspect_slide` — 布局/可读性校验 |
 | `tool_agents` | 图片生成 (T2I)、图片描述 (Caption)、长文档摘要 |
-| `pptagent` | `set_template`, `create_slide`, `write_slide`, `generate_slide`, `generate_slides_batch`, `save_generated_slides` |
+| `pptagent` | `set_template`, `create_slide`, `write_slide`, `generate_slide`, `generate_slides_batch`, `save_generated_slides`, `verify_slide`, `get_trace`, `repair_slide` |
 
 所有 MCP Server 通过 stdin/stdout 子进程通信，支持健康检查与自动重连。
 
@@ -95,6 +95,35 @@
 - **布局多样性** — 跟踪最近使用的布局，提示 LLM 避免连续重复
 - **图片分布检查** — 检测图片集中问题，打印 warning 日志
 - **WCAG 对比度校验** — `inspect_slide` 工具检查文字与背景颜色对比度（4.5:1/3:1）
+
+### 可验证行为轨迹 (Verifiable Action Traces)
+
+基于确定性规则的视觉质量检查系统，无需 VLM 调用即可检测常见问题，并支持自动修复循环。
+
+**规则引擎** (`deeppresenter/rules/`): 11 条可插拔规则
+
+| 规则 | 检测内容 | 级别 |
+|------|---------|------|
+| `overflow_text` | 文本溢出容器 | error |
+| `overflow_image` | 图片超出幻灯片边界 | error |
+| `font_size` | 字号低于可读阈值 | error |
+| `contrast_ratio` | WCAG 对比度不达标 | error |
+| `overlap_elements` | 元素位置重叠 | warning |
+| `safe_margin` | 元素距边缘 < 10pt | warning |
+| `layout_repetition` | 连续 3+ 页相同布局 | warning |
+| `image_distribution` | 图片集中在单侧 | warning |
+| `text_density` | 文字面积 > 60% | warning |
+| `image_too_small` | 图片面积 < 5% | warning |
+| `image_stretch` | 宽高比异常 | warning |
+
+**动作轨迹** (`deeppresenter/trace/`): 记录每个生成/编辑/修复动作的状态快照、验证结果和 token 消耗，支持 JSON 持久化。
+
+**修复循环**: 检测到 error 级别问题时，基于规则化修复映射（`build_repair_feedback`）指导 coder agent 修复，最多 3 轮迭代。
+
+**MCP 工具**:
+- `verify_slide(slide_index)` — 检查指定幻灯片的规则合规性
+- `get_trace(action_id?)` — 查询动作轨迹
+- `repair_slide(slide_index)` — 对指定幻灯片执行修复循环
 
 ### 稳定性与容错
 
@@ -182,6 +211,7 @@ cp deeppresenter/mcp.json.example deeppresenter/mcp.json
 | `offline_mode` | 离线模式开关 |
 | `context_folding` | 上下文折叠，防止 token 溢出 |
 | `heavy_reflect` | 重度反思模式，用渲染图片反思设计 |
+| `verifiable_reflection` | 可验证反射配置（规则开关、阈值、修复循环、轨迹） |
 
 可选服务质量提升：配置 Tavily API Key（提升搜索质量）、MinerU API Key/URL（提升 PDF 解析质量）。
 
