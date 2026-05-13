@@ -316,6 +316,37 @@ class LLM(BaseModel):
             )
 
 
+class VerifiableReflectionConfig(BaseModel):
+    """Configuration for verifiable reflection rules and repair."""
+
+    enabled: bool = Field(default=True, description="Enable verifiable reflection")
+    rules: dict[str, Any] = Field(default_factory=dict, description="Per-rule configuration")
+    repair_loop: dict[str, Any] = Field(
+        default_factory=lambda: {"max_iterations": 3, "confidence_threshold": 0.8},
+        description="Repair loop configuration",
+    )
+    trace: dict[str, Any] = Field(
+        default_factory=lambda: {"enabled": True, "storage_dir": "~/.pptagent/traces"},
+        description="Trace configuration",
+    )
+
+    def is_rule_enabled(self, rule_name: str) -> bool:
+        """Check if a specific rule is enabled."""
+        if not self.enabled:
+            return False
+        rule_config = self.rules.get(rule_name, {})
+        if isinstance(rule_config, dict):
+            return rule_config.get("enabled", True)
+        return True
+
+    def get_rule_param(self, rule_name: str, param: str, default: Any = None) -> Any:
+        """Get a parameter for a specific rule."""
+        rule_config = self.rules.get(rule_name, {})
+        if isinstance(rule_config, dict):
+            return rule_config.get(param, default)
+        return default
+
+
 class DeepPresenterConfig(BaseModel):
     """DeepPresenter Global Configuration"""
 
@@ -351,6 +382,12 @@ class DeepPresenterConfig(BaseModel):
     )
     t2i_model: LLM | None = Field(
         default=None, description="Text-to-image model configuration"
+    )
+
+    # verifiable reflection
+    verifiable_reflection: VerifiableReflectionConfig = Field(
+        default_factory=VerifiableReflectionConfig,
+        description="Verifiable reflection configuration",
     )
 
     def model_post_init(self, context):

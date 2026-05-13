@@ -48,11 +48,20 @@ class CrossSlideRule(Rule):
 class RuleEngine:
     """Engine that runs a collection of rules."""
 
-    def __init__(self, rules: list[Rule] | None = None):
+    def __init__(self, rules: list[Rule] | None = None, config: dict | None = None):
+        self.config = config or {}
         if rules is not None:
             self.rules = rules
         else:
             self.rules = self._default_rules()
+        # Filter rules based on config
+        if self.config:
+            self.rules = [r for r in self.rules if self.is_enabled(r.name)]
+
+    @classmethod
+    def from_config(cls, config: dict) -> "RuleEngine":
+        """Create a RuleEngine from a verifiable_reflection config dict."""
+        return cls(config=config)
 
     @staticmethod
     def _default_rules() -> list[Rule]:
@@ -112,5 +121,11 @@ class RuleEngine:
         return issues
 
     def is_enabled(self, rule_name: str) -> bool:
-        """Check if a rule is enabled (always True, config support in Commit 13)."""
-        return any(r.name == rule_name for r in self.rules)
+        """Check if a rule is enabled based on config."""
+        if not self.config:
+            return True
+        rules_config = self.config.get("rules", {})
+        rule_config = rules_config.get(rule_name, {})
+        if isinstance(rule_config, dict):
+            return rule_config.get("enabled", True)
+        return True

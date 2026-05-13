@@ -31,3 +31,39 @@ long_context_model:
 #   # sampling_parameters:
 #   #   response_format: "b64_json"
 #   #   extra_body: { "watermark": False }
+
+# Verifiable reflection: rule-based visual quality inspection
+verifiable_reflection:
+  enabled: true
+  rules:
+    overflow_text:
+      enabled: true
+      severity: error
+    overflow_image:
+      enabled: true
+      severity: error
+    font_size:
+      enabled: true
+      title_min_size: 24
+      body_min_size: 12
+    contrast_ratio:
+      enabled: true
+      normal_text_threshold: 4.5
+    overlap_elements:
+      enabled: true
+      severity: warning
+    safe_margin:
+      enabled: true
+      severity: warning
+    layout_repetition:
+      enabled: true
+      max_repetition: 3
+    image_distribution:
+      enabled: true
+      balance_threshold: 0.8
+  repair_loop:
+    max_iterations: 3
+    confidence_threshold: 0.8
+  trace:
+    enabled: true
+    storage_dir: "~/.pptagent/traces"
