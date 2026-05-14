@@ -512,8 +512,8 @@ body {
     padding: 6px 2px;
 }
 .preview-status {
-    min-height: 72px;
-    padding: 14px 16px;
+    min-height: 44px;
+    padding: 10px 14px;
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     background: var(--dp-status-bg);
@@ -527,7 +527,7 @@ body {
 }
 .result-toolbar {
     gap: 12px;
-    align-items: stretch;
+    align-items: center;
     margin-bottom: 14px;
 }
 .download-shell {
@@ -538,8 +538,8 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 14px;
-    min-height: 72px;
-    padding: 14px 16px;
+    min-height: 44px;
+    padding: 10px 14px;
     border-radius: 18px;
     border: 1px solid rgba(13, 107, 98, 0.12);
     background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(230, 245, 241, 0.84));
@@ -1090,13 +1090,13 @@ class ChatDemo:
                         )
                         with gr.Row(elem_classes=["field-grid"]):
                             pages_dd = gr.Dropdown(
-                                label="幻灯片页数 (#pages)",
+                                label="幻灯片页数",
                                 choices=["auto"] + [str(i) for i in range(1, 31)],
                                 value="auto",
                                 scale=1,
                             )
                             convert_type_dd = gr.Dropdown(
-                                label="输出类型 (output type)",
+                                label="输出类型",
                                 choices=list(CONVERT_MAPPING),
                                 value=list(CONVERT_MAPPING)[0],
                                 scale=1,
@@ -1230,17 +1230,16 @@ class ChatDemo:
                         <div class="section-heading">
                             <span class="section-kicker" role="doc-subtitle">Output</span>
                             <h2>结果与预览</h2>
-                            <p>生成完成后，这里会持续显示状态、预览和下载入口。</p>
                         </div>
                         """
                     )
                     with gr.Row(elem_classes=["result-toolbar"]):
-                        with gr.Column(scale=5, min_width=280):
+                        with gr.Column(scale=5, min_width=200):
                             preview_status = gr.Markdown(
                                 value="等待任务开始。生成完成后会自动显示预览。",
                                 elem_classes=["preview-status"],
                             )
-                        with gr.Column(scale=4, min_width=260):
+                        with gr.Column(scale=4, min_width=200):
                             download_card_html = gr.HTML(
                                 value=build_download_card_html(),
                                 elem_classes=["download-shell"],
