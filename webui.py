@@ -631,19 +631,22 @@ body {
     color: var(--dp-dep-btn-text) !important;
 }
 .preview-tabs {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 .preview-tabs [role="tabpanel"] {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+    flex: 1 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto;
 }
 .preview-gallery {
-    flex: 1;
+    flex: 1 !important;
+    height: 0 !important;
+    min-height: 0 !important;
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
