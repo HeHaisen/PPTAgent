@@ -336,6 +336,15 @@ body {
     flex-direction: column;
     z-index: 1;
 }
+.result-panel > * {
+    min-height: 0;
+}
+.result-panel > *:last-child {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 .section-heading {
     display: flex;
     flex-direction: column;
