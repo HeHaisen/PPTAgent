@@ -193,382 +193,277 @@ def load_runtime_config() -> DeepPresenterConfig:
 
 gradio_css = """
 :root {
-    --dp-bg: #f3ede3;
-    --dp-surface: rgba(255, 252, 246, 0.92);
-    --dp-surface-strong: #fffdf8;
-    --dp-border: rgba(23, 42, 58, 0.12);
-    --dp-text: #162534;
-    --dp-muted: #5f6e7a;
-    --dp-primary: #0d6b62;
-    --dp-primary-strong: #0a554f;
-    --dp-soft: #e6f5f1;
-    --dp-soft-strong: #d8efe8;
-    --dp-ink-soft: #ebf0f4;
-    --dp-warm: #f6e6d3;
-    --dp-shadow: 0 20px 60px rgba(16, 33, 47, 0.10);
-    --dp-preview-height-desktop: 700px;
-    --dp-preview-height-mobile: 520px;
-    --dp-status-bg: #eef4fb;
+    --dp-bg: #f5f5f0;
+    --dp-surface: #ffffff;
+    --dp-surface-alt: #fafaf7;
+    --dp-border: rgba(0, 0, 0, 0.08);
+    --dp-text: #1a1a1a;
+    --dp-muted: #6b7280;
+    --dp-primary: #0d7377;
+    --dp-primary-hover: #0a5e61;
+    --dp-primary-soft: rgba(13, 115, 119, 0.08);
+    --dp-danger: #dc2626;
+    --dp-danger-soft: rgba(220, 38, 38, 0.08);
+    --dp-shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --dp-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    --dp-radius: 12px;
+    --dp-radius-sm: 8px;
 }
+
+/* === Reset & Base === */
 body {
     margin: 0 !important;
     padding: 0 !important;
-    font-family: "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", "PingFang SC", sans-serif;
-    background:
-        radial-gradient(circle at 0% 0%, rgba(184, 218, 240, 0.70) 0%, transparent 38%),
-        radial-gradient(circle at 100% 0%, rgba(228, 211, 178, 0.55) 0%, transparent 30%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.55), transparent 55%),
-        var(--dp-bg);
+    font-family: "Inter", "IBM Plex Sans", "Source Han Sans SC", "Noto Sans SC", system-ui, sans-serif;
+    background: var(--dp-bg);
+    overflow: hidden;
+    height: 100vh;
 }
 .gradio-container {
-    max-width: 1680px !important;
+    max-width: 1560px !important;
     margin: 0 auto !important;
-    padding: 18px 18px 26px !important;
+    padding: 10px 16px 0 !important;
     color: var(--dp-text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
+footer, .gradio-container .footer { display: none !important; }
+
+/* === Compact Header === */
 .hero-banner {
-    display: grid;
-    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
-    gap: 18px;
-    margin-bottom: 16px;
-    padding: 22px 24px;
-    border: 1px solid rgba(16, 33, 47, 0.10);
-    border-radius: 28px;
-    background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(243, 248, 246, 0.88)),
-        linear-gradient(120deg, rgba(13, 107, 98, 0.06), rgba(23, 42, 58, 0.03));
-    box-shadow: var(--dp-shadow);
-    animation: rise-in 0.4s ease-out both;
-    overflow: visible !important;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 20px;
+    margin-bottom: 10px;
+    border: 1px solid var(--dp-border);
+    border-radius: var(--dp-radius);
+    background: var(--dp-surface);
+    box-shadow: var(--dp-shadow-sm);
+    flex-shrink: 0;
+    flex-wrap: wrap;
 }
 .hero-copy {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
 }
 .hero-badge {
     display: inline-flex;
-    width: fit-content;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
+    gap: 6px;
+    padding: 3px 10px;
     border-radius: 999px;
-    background: rgba(13, 107, 98, 0.10);
-    color: var(--dp-primary-strong);
-    font-size: 0.85rem;
+    background: var(--dp-primary-soft);
+    color: var(--dp-primary);
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 .hero-copy h1 {
     margin: 0;
-    font-size: clamp(2rem, 3vw, 3.1rem);
-    line-height: 1.02;
-    letter-spacing: -0.03em;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
 }
-.hero-copy p {
-    margin: 0;
-    max-width: 720px;
-    color: var(--dp-muted);
-    font-size: 1rem;
-    line-height: 1.7;
-}
+.hero-copy p { display: none; }
 .hero-side {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
 }
 .metric-pill {
-    padding: 14px 16px;
-    border-radius: 18px;
-    border: 1px solid rgba(13, 107, 98, 0.10);
-    background: rgba(255, 255, 255, 0.72);
-}
-.metric-pill strong,
-.metric-pill span {
-    display: block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--dp-border);
+    background: var(--dp-surface-alt);
+    font-size: 0.75rem;
+    white-space: nowrap;
 }
 .metric-pill strong {
-    font-size: 0.95rem;
-    margin-bottom: 4px;
+    font-weight: 600;
 }
 .metric-pill span {
     color: var(--dp-muted);
-    font-size: 0.92rem;
+    margin-left: 4px;
 }
+
+/* === Main Layout: Independent Scroll Panels === */
 .main-layout {
-    gap: 18px;
-    align-items: stretch;
-    justify-content: center;
-    overflow: visible !important;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 .panel-card {
     background: var(--dp-surface);
     border: 1px solid var(--dp-border);
-    border-radius: 24px;
-    padding: 18px;
+    border-radius: var(--dp-radius);
     box-shadow: var(--dp-shadow);
-    backdrop-filter: blur(12px);
-    animation: rise-in 0.35s ease-out both;
-    position: relative;
-    overflow: visible !important;
-}
-.input-panel {
-    animation-delay: 0.04s;
-    z-index: 3;
-}
-.result-panel {
-    animation-delay: 0.08s;
-    position: sticky;
-    top: 12px;
-    align-self: start;
-    z-index: 1;
-}
-.section-heading {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    margin-bottom: 14px;
+    overflow: hidden;
+}
+.input-panel {
+    overflow-y: auto;
+    padding: 16px;
+}
+.result-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
+}
+
+/* === Section Headings === */
+.section-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 .section-heading h3 {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: 1rem;
+    font-weight: 700;
 }
 .section-kicker {
-    color: var(--dp-primary-strong);
-    font-size: 0.78rem;
+    color: var(--dp-primary);
+    font-size: 0.7rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
 }
-.section-heading p {
-    margin: 0;
-    color: var(--dp-muted);
-    line-height: 1.6;
-}
-.panel-note {
-    margin: 0 0 14px 0;
-}
-.panel-note-strip {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-}
-.note-chip {
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(232, 244, 239, 0.86));
-    border: 1px solid rgba(13, 107, 98, 0.10);
-}
-.note-chip strong,
-.note-chip span {
-    display: block;
-}
-.note-chip strong {
-    margin-bottom: 4px;
-    font-size: 0.92rem;
-}
-.note-chip span {
-    color: var(--dp-muted);
-    font-size: 0.86rem;
-    line-height: 1.5;
-}
+.section-heading p { display: none; }
+
+/* === Control Groups === */
 .control-shell,
-.composer-shell,
-.log-shell {
-    border: 1px solid var(--dp-border);
-    border-radius: 20px;
-    padding: 14px;
-    background: rgba(255, 255, 255, 0.66);
-    margin-bottom: 14px;
-    position: relative;
-    overflow: visible !important;
-}
-.control-shell {
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.82), rgba(245, 248, 250, 0.72));
-}
 .composer-shell {
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.84), rgba(230, 245, 241, 0.62));
-}
-.subsection-title {
-    margin: 0 0 10px 0;
-}
-.subsection-title strong,
-.subsection-title span {
-    display: block;
-}
-.subsection-title strong {
-    font-size: 1rem;
-    margin-bottom: 4px;
-}
-.subsection-title span {
-    font-size: 0.88rem;
-    color: var(--dp-muted);
-    line-height: 1.5;
-}
-.field-grid {
-    gap: 10px;
-    overflow: visible !important;
-}
-.field-row-tight {
-    gap: 10px;
-    margin-top: 2px;
-    overflow: visible !important;
-}
-.template-row {
-    position: relative;
-    z-index: 24;
-    overflow: visible !important;
-}
-.template-row > div {
-    overflow: visible !important;
-}
-.template-dropdown {
-    position: relative;
-    z-index: 80;
-    overflow: visible !important;
-}
-.template-dropdown [data-testid="dropdown"] {
-    z-index: 90 !important;
-}
-.template-dropdown [data-testid="dropdown"],
-.template-dropdown [data-testid="dropdown"] > div,
-.template-dropdown [data-testid="dropdown"] > div > div {
-    position: relative;
-    overflow: visible !important;
-}
-.template-dropdown ul,
-.template-dropdown [role="listbox"],
-.template-dropdown [data-testid="dropdown-options"] {
-    z-index: 120 !important;
-    pointer-events: auto !important;
-}
-.search-toggle-wrap {
-    margin-top: 8px;
-}
-.search-toggle-wrap .wrap {
-    border: 1px solid rgba(13, 107, 98, 0.12);
-    border-radius: 16px;
-    padding: 10px 12px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(230, 245, 241, 0.70));
-}
-.gradio-container [data-testid="dropdown"] {
-    position: relative;
-    z-index: 40;
-}
-.gradio-container [data-testid="dropdown"] button,
-.gradio-container [data-testid="dropdown"] input,
-.gradio-container [data-testid="dropdown"] label {
-    pointer-events: auto !important;
-}
-.gradio-container [data-testid="dropdown"] ul,
-.gradio-container [data-testid="dropdown"] [role="listbox"] {
-    z-index: 60 !important;
-}
-.file-container {
-    position: relative;
-    z-index: 1;
-}
-.full-send-btn button {
-    min-height: 52px;
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    background: linear-gradient(135deg, var(--dp-primary), #138779) !important;
-    border: none !important;
-    box-shadow: 0 14px 34px rgba(13, 107, 98, 0.22);
-}
-.full-send-btn button:hover {
-    background: linear-gradient(135deg, var(--dp-primary-strong), var(--dp-primary)) !important;
-}
-.chat-shell {
+    border: 1px solid var(--dp-border);
+    border-radius: var(--dp-radius-sm);
+    padding: 12px;
+    background: var(--dp-surface-alt);
     margin-bottom: 10px;
 }
-.chat-container {
+.subsection-title {
+    margin: 0 0 8px 0;
+}
+.subsection-title strong {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--dp-text);
+}
+.subsection-title span { display: none; }
+
+/* === Form Fields === */
+.field-grid { gap: 8px; overflow: visible !important; }
+.field-row-tight { gap: 8px; margin-top: 2px; overflow: visible !important; }
+.template-row { position: relative; z-index: 24; overflow: visible !important; }
+.template-row > div { overflow: visible !important; }
+.template-dropdown { position: relative; z-index: 80; overflow: visible !important; }
+.template-dropdown [data-testid="dropdown"] { z-index: 90 !important; }
+.template-dropdown [data-testid="dropdown"],
+.template-dropdown [data-testid="dropdown"] > div,
+.template-dropdown [data-testid="dropdown"] > div > div { position: relative; overflow: visible !important; }
+.template-dropdown ul,
+.template-dropdown [role="listbox"],
+.template-dropdown [data-testid="dropdown-options"] { z-index: 120 !important; pointer-events: auto !important; }
+.search-toggle-wrap { margin-top: 6px; }
+.search-toggle-wrap .wrap {
     border: 1px solid var(--dp-border);
-    border-radius: 18px;
-    overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.90), rgba(242, 247, 249, 0.88));
+    border-radius: var(--dp-radius-sm);
+    padding: 8px 10px;
+    background: var(--dp-surface);
 }
-.chat-container {
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+.gradio-container [data-testid="dropdown"] { position: relative; z-index: 40; }
+.gradio-container [data-testid="dropdown"] button,
+.gradio-container [data-testid="dropdown"] input,
+.gradio-container [data-testid="dropdown"] label { pointer-events: auto !important; }
+.gradio-container [data-testid="dropdown"] ul,
+.gradio-container [data-testid="dropdown"] [role="listbox"] { z-index: 60 !important; }
+.file-container { position: relative; z-index: 1; }
+
+/* === Generate Button === */
+.full-send-btn button {
+    min-height: 48px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    background: var(--dp-primary) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: var(--dp-radius-sm) !important;
+    box-shadow: 0 2px 8px rgba(13, 115, 119, 0.25);
 }
-.token-display {
-    line-height: 1.6;
-    padding: 6px 2px;
+.full-send-btn button:hover {
+    background: var(--dp-primary-hover) !important;
 }
+
+/* === Preview Status Bar === */
 .preview-status {
-    min-height: 72px;
-    padding: 14px 16px;
+    padding: 10px 14px;
     border: 1px solid var(--dp-border);
-    border-radius: 18px;
-    background: var(--dp-status-bg);
+    border-radius: var(--dp-radius-sm);
+    background: var(--dp-surface-alt);
     color: var(--dp-text);
     font-weight: 500;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    font-size: 0.88rem;
 }
-.preview-status p {
-    margin: 0;
-    color: var(--dp-text) !important;
-}
+.preview-status p { margin: 0; color: var(--dp-text) !important; }
 .result-toolbar {
-    gap: 12px;
+    gap: 10px;
     align-items: stretch;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
-.download-shell {
-    min-width: 0;
-}
+
+/* === Download Card === */
+.download-shell { min-width: 0; }
 .download-card {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 14px;
-    min-height: 72px;
-    padding: 14px 16px;
-    border-radius: 18px;
-    border: 1px solid rgba(13, 107, 98, 0.12);
-    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(230, 245, 241, 0.84));
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--dp-radius-sm);
+    border: 1px solid var(--dp-border);
+    background: var(--dp-surface-alt);
 }
 .download-card.is-empty {
     border-style: dashed;
-    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(241, 246, 248, 0.85));
+    background: var(--dp-surface-alt);
 }
-.download-copy {
-    min-width: 0;
-}
+.download-copy { min-width: 0; }
 .download-copy strong,
 .download-copy span,
-.download-copy p {
-    display: block;
-}
+.download-copy p { display: block; }
 .download-copy strong {
-    font-size: 1rem;
+    font-size: 0.88rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.download-copy p {
-    margin: 3px 0 0 0;
-    color: var(--dp-muted);
-    font-size: 0.86rem;
-}
+.download-copy p { margin: 2px 0 0 0; color: var(--dp-muted); font-size: 0.78rem; }
 .download-kicker {
-    margin-bottom: 4px;
-    color: var(--dp-primary-strong);
-    font-size: 0.74rem;
+    margin-bottom: 2px;
+    color: var(--dp-primary);
+    font-size: 0.68rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 .download-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-end;
 }
@@ -576,143 +471,171 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
-    padding: 0 14px;
-    border-radius: 999px;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: var(--dp-radius-sm);
     text-decoration: none !important;
-    font-weight: 700;
-    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+    font-weight: 600;
+    font-size: 0.82rem;
+    transition: background 0.15s ease;
 }
 .download-link.primary {
     background: var(--dp-primary);
-    color: #ffffff !important;
-    box-shadow: 0 12px 28px rgba(13, 107, 98, 0.18);
+    color: #fff !important;
 }
-.download-link.primary:hover {
-    background: var(--dp-primary-strong);
-    transform: translateY(-1px);
-}
+.download-link.primary:hover { background: var(--dp-primary-hover); }
 .download-link.secondary {
-    border: 1px solid rgba(22, 37, 52, 0.12);
-    background: rgba(255, 255, 255, 0.70);
+    border: 1px solid var(--dp-border);
+    background: var(--dp-surface);
     color: var(--dp-text) !important;
 }
-.download-link.secondary:hover {
-    background: #ffffff;
-    transform: translateY(-1px);
-}
+.download-link.secondary:hover { background: var(--dp-surface-alt); }
 .download-link.disabled {
-    background: #e7edf2;
-    color: #768492 !important;
+    background: #e5e7eb;
+    color: #9ca3af !important;
     pointer-events: none;
 }
-.dep-check-panel {
-    margin-top: 8px;
-    border: 1px dashed #c8d8e8;
-    border-radius: 10px;
-    background: #f6fbff;
-    padding: 8px 10px;
-}
-.dep-check-panel p {
-    margin: 0;
-}
-.dep-refresh-btn button {
-    border-color: #c5d5e5 !important;
-    background: #edf4fb !important;
-    color: #17334d !important;
-}
+
+/* === Preview Gallery & Tabs === */
 .preview-gallery {
     border: 1px solid var(--dp-border);
-    border-radius: 18px;
+    border-radius: var(--dp-radius-sm);
     overflow: hidden;
-    min-height: var(--dp-preview-height-desktop);
-    background: rgba(255, 255, 255, 0.76);
+    flex: 1;
+    min-height: 0;
+    background: var(--dp-surface-alt);
+}
+.preview-tabs {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 .preview-tabs [role="tablist"] {
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--dp-surface-alt);
     border: 1px solid var(--dp-border);
-    border-radius: 14px;
-    padding: 5px;
+    border-radius: var(--dp-radius-sm);
+    padding: 3px;
+    flex-shrink: 0;
 }
 .preview-tabs button[role="tab"] {
-    color: #1f3850 !important;
-    background: rgba(232, 240, 248, 0.92) !important;
-    border: 1px solid #cfdeec !important;
-    border-radius: 10px !important;
+    color: var(--dp-muted) !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 6px !important;
     font-weight: 600;
+    font-size: 0.82rem;
+    padding: 6px 14px;
 }
 .preview-tabs button[role="tab"][aria-selected="true"] {
-    color: #ffffff !important;
+    color: #fff !important;
     background: var(--dp-primary) !important;
-    border-color: var(--dp-primary-strong) !important;
+    border-color: var(--dp-primary) !important;
 }
 .preview-tabs button[role="tab"]:hover {
-    color: #102a42 !important;
-    background: #dce9f6 !important;
+    color: var(--dp-text) !important;
+    background: var(--dp-border) !important;
 }
+.preview-tabs > div:not([role="tablist"]) {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* === PDF Preview === */
 .pdf-preview-shell {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
+    flex: 1;
+    min-height: 0;
     border: 1px solid var(--dp-border);
-    border-radius: 18px;
+    border-radius: var(--dp-radius-sm);
     overflow: hidden;
     background: #fff;
 }
 .pdf-preview-shell iframe {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
+    height: 100%;
+    min-height: 500px;
     border: 0;
     display: block;
 }
-footer,
-.gradio-container .footer {
-    display: none !important;
+
+/* === Chat & Log === */
+.chat-container {
+    border: 1px solid var(--dp-border);
+    border-radius: var(--dp-radius-sm);
+    overflow: hidden;
+    background: var(--dp-surface);
 }
+.chat-shell { margin-bottom: 8px; }
+.token-display { line-height: 1.5; padding: 4px 2px; }
+.log-shell {
+    border: 1px solid var(--dp-border);
+    border-radius: var(--dp-radius-sm);
+    padding: 12px;
+    background: var(--dp-surface-alt);
+    margin-bottom: 10px;
+}
+
+/* === Dep Check === */
+.dep-check-panel {
+    margin-top: 6px;
+    border: 1px dashed var(--dp-border);
+    border-radius: var(--dp-radius-sm);
+    background: var(--dp-surface-alt);
+    padding: 8px 10px;
+}
+.dep-check-panel p { margin: 0; }
+.dep-refresh-btn button {
+    border-color: var(--dp-border) !important;
+    background: var(--dp-surface-alt) !important;
+    color: var(--dp-text) !important;
+}
+
+/* === Animations === */
 @keyframes rise-in {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-@media (max-width: 980px) {
+
+/* === Responsive: Tablet === */
+@media (max-width: 1200px) {
+    .gradio-container { padding: 8px 12px 0 !important; }
+    .hero-side { display: none; }
+    .main-layout { gap: 8px; }
+}
+
+/* === Responsive: Mobile === */
+@media (max-width: 800px) {
+    body { overflow: auto; height: auto; }
     .gradio-container {
-        padding: 10px 10px 16px !important;
+        padding: 8px 8px 0 !important;
+        height: auto;
+        overflow: auto;
     }
-    .hero-banner {
-        grid-template-columns: 1fr;
-        padding: 18px;
+    .hero-banner { padding: 6px 12px; }
+    .hero-copy h1 { font-size: 0.95rem; }
+    .main-layout {
+        flex-direction: column;
+        overflow: auto;
     }
     .panel-card {
-        padding: 12px;
+        border-radius: var(--dp-radius-sm);
     }
-    .panel-note-strip {
-        grid-template-columns: 1fr;
+    .input-panel {
+        max-height: none;
+        overflow: visible;
     }
     .result-panel {
-        position: static;
+        min-height: 60vh;
     }
     .result-toolbar,
     .download-card {
         flex-direction: column;
         align-items: stretch;
     }
-    .download-actions {
-        justify-content: stretch;
-    }
-    .download-link {
-        width: 100%;
-    }
-    .preview-gallery {
-        min-height: var(--dp-preview-height-mobile);
-    }
-    .pdf-preview-shell,
-    .pdf-preview-shell iframe {
-        min-height: var(--dp-preview-height-mobile);
-    }
+    .download-actions { justify-content: stretch; }
+    .download-link { width: 100%; }
 }
 """
 
@@ -950,80 +873,34 @@ class ChatDemo:
             theme=gr.themes.Soft(),
             css=gradio_css,
         ) as demo:
+            # ===== 顶部紧凑 Header =====
             gr.HTML(
                 """
-                <section class="hero-banner">
+                <div class="hero-banner">
                     <div class="hero-copy">
-                        <span class="hero-badge">DeepPresenter Studio</span>
-                        <h1>把素材整理成可交付的演示文稿</h1>
-                        <p>
-                            左侧聚焦需求、模板与附件，右侧持续显示结果、预览和下载入口。
-                            适合快速起稿，也适合在上传模板上直接编辑。
-                        </p>
+                        <span class="hero-badge">DP Studio</span>
+                        <h1>AI 演示文稿工作台</h1>
                     </div>
                     <div class="hero-side">
-                        <div class="metric-pill">
-                            <strong>双工作模式</strong>
-                            <span>自由生成与模板直编可以按任务切换。</span>
-                        </div>
-                        <div class="metric-pill">
-                            <strong>渐进预览</strong>
-                            <span>生成中会自动刷新右侧预览，不必反复下载。</span>
-                        </div>
-                        <div class="metric-pill">
-                            <strong>稳定下载</strong>
-                            <span>结果区提供文件直链和打开入口，避免按钮失效。</span>
-                        </div>
+                        <div class="metric-pill"><strong>自由生成</strong><span>模板直编</span></div>
+                        <div class="metric-pill"><strong>渐进预览</strong><span>实时刷新</span></div>
+                        <div class="metric-pill"><strong>多格式</strong><span>PPTX / PDF</span></div>
                     </div>
-                </section>
+                </div>
                 """
             )
 
+            # ===== 主布局：左侧输入 + 右侧预览工作台 =====
             with gr.Row(elem_classes=["main-layout"]):
+                # ===== 左栏：任务配置与输入 =====
                 with gr.Column(
-                    scale=6,
-                    min_width=760,
+                    scale=2,
+                    min_width=380,
                     elem_classes=["panel-card", "input-panel"],
                 ):
-                    gr.HTML(
-                        """
-                        <div class="section-heading">
-                            <span class="section-kicker">Workspace</span>
-                            <h3>任务输入</h3>
-                            <p>先配置模式、页数和模板，再补充附件与目标描述。</p>
-                        </div>
-                        """,
-                    )
-                    gr.HTML(
-                        """
-                        <div class="panel-note">
-                            <div class="panel-note-strip">
-                                <div class="note-chip">
-                                    <strong>页数控制</strong>
-                                    <span>可指定固定页数，也可以让系统自动判断。</span>
-                                </div>
-                                <div class="note-chip">
-                                    <strong>模板工作流</strong>
-                                    <span>上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
-                                </div>
-                                <div class="note-chip">
-                                    <strong>附件材料</strong>
-                                    <span>PDF、文档和图片会被解析为内容素材参与生成。</span>
-                                </div>
-                            </div>
-                        </div>
-                        """,
-                    )
-
+                    # -- 1. 项目设定（展开） --
                     with gr.Group(elem_classes=["control-shell"]):
-                        gr.HTML(
-                            """
-                            <div class="subsection-title">
-                                <strong>项目设定</strong>
-                                <span>定义生成模式、页数规模和模板来源。</span>
-                            </div>
-                            """
-                        )
+                        gr.HTML('<div class="subsection-title"><strong>项目设定</strong></div>')
                         with gr.Row(elem_classes=["field-grid"]):
                             pages_dd = gr.Dropdown(
                                 label="幻灯片页数 (#pages)",
@@ -1052,22 +929,67 @@ class ChatDemo:
                         enable_search_cb = gr.Checkbox(
                             label="开启联网搜索",
                             value=True,
-                            info="关闭后仅使用附件和本地工作区材料，不再调用网页、图片或论文搜索。",
+                            info="关闭后仅使用附件和本地工作区材料。",
                             elem_classes=["search-toggle-wrap"],
                         )
                         custom_template_input = gr.File(
-                            label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
+                            label="上传自定义模板 (.pptx，可选)",
                             file_count="single",
                             file_types=[".pptx"],
                             type="filepath",
                             visible=False,
                         )
+
+                    # -- 2. 素材输入（展开） --
+                    with gr.Group(elem_classes=["control-shell"]):
+                        gr.HTML('<div class="subsection-title"><strong>素材输入</strong></div>')
                         attachments_input = gr.File(
                             label="附件 (可多选)",
                             file_count="multiple",
                             type="filepath",
                             elem_classes=["file-container"],
                         )
+
+                    # -- 3. 需求描述（展开） --
+                    with gr.Group(elem_classes=["composer-shell"]):
+                        gr.HTML('<div class="subsection-title"><strong>需求描述</strong></div>')
+                        msg_input = gr.Textbox(
+                            label="指令",
+                            placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World",
+                            lines=3,
+                            max_lines=6,
+                        )
+
+                    # -- 4. 生成操作（始终可见） --
+                    with gr.Row():
+                        send_btn = gr.Button(
+                            "生成并刷新预览",
+                            variant="primary",
+                            elem_classes=["full-send-btn"],
+                            scale=3,
+                        )
+                        cancel_btn = gr.Button(
+                            "停止生成",
+                            variant="stop",
+                            visible=True,
+                            scale=1,
+                        )
+                    loop_state = gr.State(None)
+                    session_cookie_js = """
+                    <script>
+                    (function() {
+                        var match = document.cookie.match(/dp_session_id=([^;]+)/);
+                        if (!match) {
+                            var sid = Date.now().toString(36) + Math.random().toString(36).slice(2);
+                            document.cookie = 'dp_session_id=' + sid + ';path=/;max-age=7200';
+                        }
+                    })();
+                    </script>
+                    """
+                    session_cookie = gr.HTML(value=session_cookie_js, visible=False)
+
+                    # -- 5. 高级设置（折叠） --
+                    with gr.Accordion("高级设置", open=False):
                         workspace_input = gr.Textbox(
                             label="工作区路径 (workspace)",
                             value="",
@@ -1075,7 +997,8 @@ class ChatDemo:
                             info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
                         )
 
-                    with gr.Accordion("📜 历史会话", open=False):
+                    # -- 6. 历史会话（折叠） --
+                    with gr.Accordion("历史会话", open=False):
                         session_dd = gr.Dropdown(
                             label="选择会话",
                             choices=[],
@@ -1095,7 +1018,7 @@ class ChatDemo:
                             )
                         with gr.Row():
                             resume_btn = gr.Button(
-                                "▶ 继续生成",
+                                "继续生成",
                                 size="sm",
                                 variant="primary",
                                 scale=1,
@@ -1103,7 +1026,7 @@ class ChatDemo:
                                 visible=True,
                             )
                             delete_progress_btn = gr.Button(
-                                "🗑 删除进度",
+                                "删除进度",
                                 size="sm",
                                 variant="stop",
                                 scale=1,
@@ -1111,102 +1034,59 @@ class ChatDemo:
                                 visible=True,
                             )
 
-                    with gr.Group(elem_classes=["composer-shell"]):
-                        gr.HTML(
-                            """
-                            <div class="subsection-title">
-                                <strong>需求描述</strong>
-                                <span>明确受众、目标和内容重点，生成质量会更稳定。</span>
-                            </div>
-                            """
-                        )
-                        msg_input = gr.Textbox(
-                            label="指令",
-                            placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World\n或：修改第 5 页，增加数据图表",
-                            lines=4,
-                            max_lines=8,
-                        )
-                        send_btn = gr.Button(
-                            "生成并刷新预览",
-                            variant="primary",
-                            elem_classes=["full-send-btn"],
-                        )
-                        cancel_btn = gr.Button(
-                            "停止生成",
-                            variant="stop",
-                            visible=True,
-                        )
-                        loop_state = gr.State(None)
-                        # JavaScript to persist session_id in cookie for reconnection
-                        session_cookie_js = """
-                        <script>
-                        (function() {
-                            var match = document.cookie.match(/dp_session_id=([^;]+)/);
-                            if (!match) {
-                                var sid = Date.now().toString(36) + Math.random().toString(36).slice(2);
-                                document.cookie = 'dp_session_id=' + sid + ';path=/;max-age=7200';
-                            }
-                        })();
-                        </script>
-                        """
-                        session_cookie = gr.HTML(value=session_cookie_js, visible=False)
-
-                    with gr.Accordion("📊 Token 使用统计", open=False):
+                    # -- 7. Token 统计（折叠） --
+                    with gr.Accordion("Token 使用统计", open=False):
                         token_display = gr.Markdown(
                             value="暂无数据",
                             elem_classes=["token-display"],
                         )
 
-                    with gr.Group(elem_classes=["log-shell"]):
-                        gr.HTML(
-                            """
-                            <div class="subsection-title chat-shell">
-                                <strong>执行轨迹</strong>
-                                <span>显示代理消息、工具调用和生成过程，便于排查问题。</span>
-                            </div>
-                            """
-                        )
+                    # -- 8. 执行轨迹（折叠） --
+                    with gr.Accordion("执行轨迹", open=False):
                         chatbot = gr.Chatbot(
                             value=[],
-                            height=560,
+                            height=400,
                             show_label=False,
                             type="messages",
                             render_markdown=True,
                             elem_classes=["chat-container"],
                         )
-                        with gr.Accordion("📋 系统日志", open=False):
-                            log_display = gr.Code(
-                                value="",
-                                language=None,
-                                label="",
-                                lines=12,
-                                interactive=False,
-                                elem_classes=["log-code-block"],
-                            )
-                            log_refresh_btn = gr.Button(
-                                "刷新日志",
-                                size="sm",
-                                variant="secondary",
-                            )
 
+                    # -- 9. 系统日志（折叠） --
+                    with gr.Accordion("系统日志", open=False):
+                        log_display = gr.Code(
+                            value="",
+                            language=None,
+                            label="",
+                            lines=10,
+                            interactive=False,
+                            elem_classes=["log-code-block"],
+                        )
+                        log_refresh_btn = gr.Button(
+                            "刷新日志",
+                            size="sm",
+                            variant="secondary",
+                        )
+
+                # ===== 右栏：预览工作台 =====
                 with gr.Column(
-                    scale=4,
-                    min_width=460,
+                    scale=3,
+                    min_width=680,
                     elem_classes=["panel-card", "result-panel"],
                 ):
+                    # -- 顶部状态栏 --
                     gr.HTML(
                         """
                         <div class="section-heading">
-                            <span class="section-kicker">Output</span>
+                            <span class="section-kicker">Preview</span>
                             <h3>结果与预览</h3>
-                            <p>生成完成后，这里会持续显示状态、预览和下载入口。</p>
                         </div>
                         """
                     )
                     with gr.Row(elem_classes=["result-toolbar"]):
                         with gr.Column(scale=5, min_width=280):
                             preview_status = gr.Markdown(
-                                value="等待任务开始。生成完成后会自动显示预览。",
+                                value="等待任务开始。生成完成后将在这里预览演示文稿。",
                                 elem_classes=["preview-status"],
                             )
                         with gr.Column(scale=4, min_width=260):
@@ -1214,13 +1094,13 @@ class ChatDemo:
                                 value=build_download_card_html(),
                                 elem_classes=["download-shell"],
                             )
+                    # -- 预览画布：幻灯片 / PDF --
                     with gr.Tabs(elem_classes=["preview-tabs"]):
                         with gr.Tab("幻灯片预览"):
                             preview_gallery = gr.Gallery(
                                 value=[],
                                 label="PPT 页面预览",
                                 columns=1,
-                                height=700,
                                 object_fit="contain",
                                 visible=False,
                                 elem_classes=["preview-gallery"],
