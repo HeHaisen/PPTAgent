@@ -332,6 +332,8 @@ body {
 .result-panel {
     animation-delay: 0.08s;
     align-self: stretch;
+    display: flex;
+    flex-direction: column;
     z-index: 1;
 }
 .section-heading {
@@ -628,11 +630,28 @@ body {
     background: var(--dp-dep-btn-bg) !important;
     color: var(--dp-dep-btn-text) !important;
 }
+.preview-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+.preview-tabs [role="tabpanel"] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 .preview-gallery {
+    flex: 1;
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
     background: rgba(255, 255, 255, 0.76);
+}
+.preview-gallery img {
+    max-height: 100%;
+    object-fit: contain;
 }
 .preview-tabs [role="tablist"] {
     background: rgba(255, 255, 255, 0.72);
