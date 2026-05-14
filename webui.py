@@ -227,75 +227,65 @@ body {
     color: var(--dp-text);
 }
 .hero-banner {
-    display: grid;
-    grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
-    gap: 18px;
-    margin-bottom: 16px;
-    padding: 22px 24px;
-    border: 1px solid rgba(16, 33, 47, 0.10);
-    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 12px 20px;
+    border: 1px solid rgba(16, 33, 47, 0.08);
+    border-radius: 18px;
     background:
         linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(243, 248, 246, 0.88)),
         linear-gradient(120deg, rgba(13, 107, 98, 0.06), rgba(23, 42, 58, 0.03));
-    box-shadow: var(--dp-shadow);
+    box-shadow: 0 4px 16px rgba(16, 33, 47, 0.06);
     animation: rise-in 0.4s ease-out both;
     overflow: visible !important;
 }
 .hero-copy {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
 }
 .hero-badge {
     display: inline-flex;
     width: fit-content;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
+    gap: 6px;
+    padding: 4px 10px;
     border-radius: 999px;
     background: rgba(13, 107, 98, 0.10);
     color: var(--dp-primary-strong);
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 .hero-copy h1 {
     margin: 0;
-    font-size: clamp(2rem, 3vw, 3.1rem);
-    line-height: 1.02;
-    letter-spacing: -0.03em;
+    font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
 }
 .hero-copy p {
-    margin: 0;
-    max-width: 720px;
-    color: var(--dp-muted);
-    font-size: 1rem;
-    line-height: 1.7;
+    display: none;
 }
 .hero-side {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
+    display: none;
 }
-.metric-pill {
-    padding: 14px 16px;
-    border-radius: 18px;
-    border: 1px solid rgba(13, 107, 98, 0.10);
-    background: rgba(255, 255, 255, 0.72);
+.hero-help-link {
+    font-size: 0.82rem;
+    color: var(--dp-primary-strong);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    opacity: 0.8;
+    transition: opacity 0.15s;
 }
-.metric-pill strong,
-.metric-pill span {
-    display: block;
-}
-.metric-pill strong {
-    font-size: 0.95rem;
-    margin-bottom: 4px;
-}
-.metric-pill span {
-    color: var(--dp-muted);
-    font-size: 0.92rem;
+.hero-help-link:hover {
+    opacity: 1;
+    text-decoration: underline;
 }
 .main-layout {
     gap: 18px;
@@ -315,8 +305,26 @@ body {
     overflow: visible !important;
 }
 .input-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: calc(100vh - 120px);
     animation-delay: 0.04s;
     z-index: 3;
+}
+/* 左侧可滚动中间区域 */
+.dp-left-scroll-wrap {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 4px;
+}
+.dp-left-scroll-wrap::-webkit-scrollbar {
+    width: 5px;
+}
+.dp-left-scroll-wrap::-webkit-scrollbar-thumb {
+    background: rgba(13,107,98,0.15);
+    border-radius: 3px;
 }
 .result-panel {
     animation-delay: 0.08s;
@@ -378,9 +386,17 @@ body {
     border-radius: 20px;
     padding: 14px;
     background: rgba(255, 255, 255, 0.66);
-    margin-bottom: 14px;
+    margin-bottom: 0;
     position: relative;
     overflow: visible !important;
+    flex: 0 0 auto !important;
+}
+/* 确保 input-panel 的 Gradio 内部 wrap 也是 flex-col */
+.input-panel > .wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
 }
 .control-shell {
     background:
@@ -422,6 +438,15 @@ body {
 }
 .template-row > div {
     overflow: visible !important;
+}
+/* 模板 Radio 紧凑样式 */
+.template-row label[type="radio"],
+.template-row .wrap label {
+    padding: 2px 0 !important;
+    margin: 0 !important;
+}
+.template-row fieldset {
+    gap: 2px !important;
 }
 .template-dropdown {
     position: relative;
@@ -513,9 +538,96 @@ body {
     color: var(--dp-text) !important;
 }
 .result-toolbar {
+    display: none !important;
+}
+/* 紧凑状态栏（替代原有 result-toolbar） */
+.inline-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 12px;
-    align-items: stretch;
-    margin-bottom: 14px;
+    min-height: 36px;
+    margin-bottom: 10px;
+    padding: 0 2px;
+}
+.status-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--dp-muted);
+    white-space: nowrap;
+}
+.status-dot .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #34d399;
+    flex-shrink: 0;
+}
+.status-dot.generating .dot {
+    background: #f59e0b;
+    animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+.dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 0.80rem;
+    font-weight: 700;
+    background: var(--dp-primary);
+    color: #fff !important;
+    text-decoration: none !important;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    white-space: nowrap;
+}
+.dl-btn:hover {
+    background: var(--dp-primary-strong);
+    transform: translateY(-1px);
+}
+.dl-btn.hidden {
+    display: none !important;
+}
+/* 空状态引导 */
+.empty-state-guide {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 320px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--dp-muted);
+}
+.empty-state-guide.hidden {
+    display: none !important;
+}
+.empty-state-guide svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+.empty-state-guide .es-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--dp-text);
+    opacity: 0.55;
+    margin-bottom: 6px;
+}
+.empty-state-guide .es-sub {
+    font-size: 0.85rem;
+    opacity: 0.65;
+    max-width: 320px;
+    line-height: 1.6;
 }
 .download-shell {
     min-width: 0;
@@ -680,11 +792,18 @@ footer,
         padding: 10px 10px 16px !important;
     }
     .hero-banner {
-        grid-template-columns: 1fr;
-        padding: 18px;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 10px 14px;
     }
     .panel-card {
         padding: 12px;
+    }
+    .input-panel {
+        max-height: none !important;
+    }
+    .dp-left-scroll-wrap {
+        overflow-y: visible !important;
     }
     .panel-note-strip {
         grid-template-columns: 1fr;
@@ -692,7 +811,6 @@ footer,
     .result-panel {
         position: static;
     }
-    .result-toolbar,
     .download-card {
         flex-direction: column;
         align-items: stretch;
@@ -709,6 +827,10 @@ footer,
     .pdf-preview-shell,
     .pdf-preview-shell iframe {
         min-height: var(--dp-preview-height-mobile);
+    }
+    .empty-state-guide {
+        min-height: 200px;
+        padding: 24px 16px;
     }
 }
 """
@@ -947,31 +1069,18 @@ class ChatDemo:
             theme=gr.themes.Soft(),
             css=gradio_css,
         ) as demo:
+            # [精简] 极简 Header：压缩标题，移除说明卡片
             gr.HTML(
                 """
                 <section class="hero-banner">
                     <div class="hero-copy">
-                        <span class="hero-badge">DeepPresenter Studio</span>
+                        <span class="hero-badge">DeepPresenter</span>
                         <h1>把素材整理成可交付的演示文稿</h1>
-                        <p>
-                            左侧聚焦需求、模板与附件，右侧持续显示结果、预览和下载入口。
-                            适合快速起稿，也适合在上传模板上直接编辑。
-                        </p>
                     </div>
-                    <div class="hero-side">
-                        <div class="metric-pill">
-                            <strong>双工作模式</strong>
-                            <span>自由生成与模板直编可以按任务切换。</span>
-                        </div>
-                        <div class="metric-pill">
-                            <strong>渐进预览</strong>
-                            <span>生成中会自动刷新右侧预览，不必反复下载。</span>
-                        </div>
-                        <div class="metric-pill">
-                            <strong>稳定下载</strong>
-                            <span>结果区提供文件直链和打开入口，避免按钮失效。</span>
-                        </div>
-                    </div>
+                    <a class="hero-help-link" onclick="
+                        var el = document.querySelector('[data-testid=\"accordion\"]');
+                        if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+                    ">帮助与说明</a>
                 </section>
                 """
             )
@@ -983,6 +1092,8 @@ class ChatDemo:
                     min_width=420,
                     elem_classes=["panel-card", "input-panel"],
                 ):
+                    # [精简] 左侧可滚动区域开始：标题 + 设置项
+                    gr.HTML('<div class="dp-left-scroll-wrap">')
                     gr.HTML(
                         """
                         <div class="section-heading">
@@ -1110,6 +1221,9 @@ class ChatDemo:
                                 visible=True,
                             )
 
+                    # [精简] 左侧可滚动区域结束
+                    gr.HTML('</div>')
+
                     # [重构] 核心输入区：附件上传 + 需求描述紧凑排列，按钮固定底部
                     with gr.Group(elem_classes=["composer-shell"]):
                         gr.HTML(
@@ -1162,15 +1276,30 @@ class ChatDemo:
                     min_width=600,
                     elem_classes=["panel-card", "result-panel"],
                 ):
+                    # [精简] 极简标题行
                     gr.HTML(
                         """
-                        <div class="section-heading">
+                        <div class="section-heading" style="margin-bottom:6px">
                             <span class="section-kicker">Output</span>
                             <h3>结果与预览</h3>
-                            <p>生成完成后，这里会持续显示状态、预览和下载入口。</p>
                         </div>
                         """
                     )
+                    # [精简] 紧凑状态栏：状态指示 + 下载按钮（JS 驱动）
+                    gr.HTML(
+                        """
+                        <div class="inline-status-bar">
+                            <span class="status-dot" id="dp-status-dot">
+                                <span class="dot"></span>
+                                <span class="txt">准备就绪</span>
+                            </span>
+                            <a class="dl-btn hidden" id="dp-dl-btn" href="#" download>
+                                下载文件
+                            </a>
+                        </div>
+                        """
+                    )
+                    # [保留] 原有组件（被 CSS 隐藏），供 Python 事件绑定使用
                     with gr.Row(elem_classes=["result-toolbar"]):
                         with gr.Column(scale=5, min_width=280):
                             preview_status = gr.Markdown(
@@ -1182,6 +1311,19 @@ class ChatDemo:
                                 value=build_download_card_html(),
                                 elem_classes=["download-shell"],
                             )
+                    # [精简] 空状态引导（有内容时被 JS 隐藏）
+                    gr.HTML(
+                        """
+                        <div class="empty-state-guide" id="dp-empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="18" rx="3"/>
+                                <path d="M8 12h8M12 8v8"/>
+                            </svg>
+                            <div class="es-title">在左侧输入需求或拖拽素材</div>
+                            <div class="es-sub">点击「生成并刷新预览」即可立即生成演示文档，结果将在此处实时呈现。</div>
+                        </div>
+                        """
+                    )
                     # [重构] 右侧 Tabs：新增"执行日志与轨迹"Tab，从左侧迁入
                     with gr.Tabs(elem_classes=["preview-tabs"]):
                         with gr.Tab("幻灯片预览"):
@@ -1226,6 +1368,73 @@ class ChatDemo:
                                     size="sm",
                                     variant="secondary",
                                 )
+
+            # [精简] JS: 同步隐藏组件状态到紧凑状态栏 + 空状态切换
+            gr.HTML(
+                value="""
+                <script>
+                (function(){
+                    function waitForEl(sel,cb){
+                        var el=document.querySelector(sel);
+                        if(el)return cb(el);
+                        new MutationObserver(function(_,obs){
+                            var e=document.querySelector(sel);
+                            if(e){obs.disconnect();cb(e);}
+                        }).observe(document.body,{childList:true,subtree:true});
+                    }
+                    // 状态栏同步
+                    waitForEl('.preview-status',function(src){
+                        var dot=document.getElementById('dp-status-dot');
+                        if(!dot)return;
+                        var txt=dot.querySelector('.txt');
+                        function sync(){
+                            var t=src.textContent||'';
+                            if(t.indexOf('生成')>-1||t.indexOf('⏳')>-1){
+                                dot.className='status-dot generating';
+                                txt.textContent='生成中...';
+                            }else if(t.indexOf('完成')>-1||t.indexOf('✅')>-1){
+                                dot.className='status-dot';
+                                txt.textContent='已完成';
+                            }else if(t.indexOf('停止')>-1||t.indexOf('⚠')>-1){
+                                dot.className='status-dot';
+                                txt.textContent=t.substring(0,20);
+                            }
+                        }
+                        sync();
+                        new MutationObserver(sync).observe(src,{childList:true,subtree:true,characterData:true});
+                    });
+                    // 下载按钮同步
+                    waitForEl('.download-shell',function(src){
+                        var btn=document.getElementById('dp-dl-btn');
+                        if(!btn)return;
+                        function sync(){
+                            var a=src.querySelector('a.download-link.primary');
+                            if(a&&a.href){
+                                btn.href=a.href;
+                                btn.classList.remove('hidden');
+                            }else{
+                                btn.classList.add('hidden');
+                            }
+                        }
+                        sync();
+                        new MutationObserver(sync).observe(src,{childList:true,subtree:true});
+                    });
+                    // 空状态切换
+                    waitForEl('.preview-gallery',function(gal){
+                        var es=document.getElementById('dp-empty-state');
+                        if(!es)return;
+                        function sync(){
+                            var vis=gal.offsetParent!==null;
+                            es.classList.toggle('hidden',vis);
+                        }
+                        sync();
+                        new MutationObserver(sync).observe(gal,{attributes:true});
+                    });
+                })();
+                </script>
+                """,
+                visible=False,
+            )
 
             def _toggle_template_visibility(v: str):
                 show_template = "模版" in v
