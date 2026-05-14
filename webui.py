@@ -198,9 +198,10 @@ gradio_css = """
     --dp-surface-strong: #fffdf8;
     --dp-border: rgba(23, 42, 58, 0.12);
     --dp-text: #162534;
-    --dp-muted: #5f6e7a;
+    --dp-muted: #4f5e6a;
     --dp-primary: #0d6b62;
     --dp-primary-strong: #0a554f;
+    --dp-primary-bright: #138779;
     --dp-soft: #e6f5f1;
     --dp-soft-strong: #d8efe8;
     --dp-ink-soft: #ebf0f4;
@@ -209,6 +210,18 @@ gradio_css = """
     --dp-preview-height-desktop: 700px;
     --dp-preview-height-mobile: 520px;
     --dp-status-bg: #eef4fb;
+    --dp-white: #fffdf8;
+    --dp-disabled-bg: #e7edf2;
+    --dp-disabled-text: #768492;
+    --dp-tab-border: #cfdeec;
+    --dp-tab-hover-bg: #dce9f6;
+    --dp-tab-hover-text: #102a42;
+    --dp-tab-text: #1f3850;
+    --dp-dep-border: #c8d8e8;
+    --dp-dep-bg: #f6fbff;
+    --dp-dep-btn-border: #c5d5e5;
+    --dp-dep-btn-bg: #edf4fb;
+    --dp-dep-btn-text: #17334d;
 }
 body {
     margin: 0 !important;
@@ -329,7 +342,7 @@ body {
     gap: 5px;
     margin-bottom: 14px;
 }
-.section-heading h3 {
+.section-heading h2 {
     margin: 0;
     font-size: 1.4rem;
 }
@@ -474,7 +487,7 @@ body {
     font-size: 1rem;
     font-weight: 700;
     letter-spacing: 0.01em;
-    background: linear-gradient(135deg, var(--dp-primary), #138779) !important;
+    background: linear-gradient(135deg, var(--dp-primary), var(--dp-primary-bright)) !important;
     border: none !important;
     box-shadow: 0 14px 34px rgba(13, 107, 98, 0.22);
 }
@@ -582,7 +595,7 @@ body {
 }
 .download-link.primary {
     background: var(--dp-primary);
-    color: #ffffff !important;
+    color: var(--dp-white) !important;
     box-shadow: 0 12px 28px rgba(13, 107, 98, 0.18);
 }
 .download-link.primary:hover {
@@ -595,28 +608,28 @@ body {
     color: var(--dp-text) !important;
 }
 .download-link.secondary:hover {
-    background: #ffffff;
+    background: var(--dp-white);
     transform: translateY(-1px);
 }
 .download-link.disabled {
-    background: #e7edf2;
-    color: #768492 !important;
+    background: var(--dp-disabled-bg);
+    color: var(--dp-disabled-text) !important;
     pointer-events: none;
 }
 .dep-check-panel {
     margin-top: 8px;
-    border: 1px dashed #c8d8e8;
+    border: 1px dashed var(--dp-dep-border);
     border-radius: 10px;
-    background: #f6fbff;
+    background: var(--dp-dep-bg);
     padding: 8px 10px;
 }
 .dep-check-panel p {
     margin: 0;
 }
 .dep-refresh-btn button {
-    border-color: #c5d5e5 !important;
-    background: #edf4fb !important;
-    color: #17334d !important;
+    border-color: var(--dp-dep-btn-border) !important;
+    background: var(--dp-dep-btn-bg) !important;
+    color: var(--dp-dep-btn-text) !important;
 }
 .preview-gallery {
     border: 1px solid var(--dp-border);
@@ -632,20 +645,20 @@ body {
     padding: 5px;
 }
 .preview-tabs button[role="tab"] {
-    color: #1f3850 !important;
+    color: var(--dp-tab-text) !important;
     background: rgba(232, 240, 248, 0.92) !important;
-    border: 1px solid #cfdeec !important;
+    border: 1px solid var(--dp-tab-border) !important;
     border-radius: 10px !important;
     font-weight: 600;
 }
 .preview-tabs button[role="tab"][aria-selected="true"] {
-    color: #ffffff !important;
+    color: var(--dp-white) !important;
     background: var(--dp-primary) !important;
     border-color: var(--dp-primary-strong) !important;
 }
 .preview-tabs button[role="tab"]:hover {
-    color: #102a42 !important;
-    background: #dce9f6 !important;
+    color: var(--dp-tab-hover-text) !important;
+    background: var(--dp-tab-hover-bg) !important;
 }
 .pdf-preview-shell {
     width: 100%;
@@ -653,7 +666,7 @@ body {
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
-    background: #fff;
+    background: var(--dp-white);
 }
 .pdf-preview-shell iframe {
     width: 100%;
@@ -665,6 +678,29 @@ footer,
 .gradio-container .footer {
     display: none !important;
 }
+
+/* Focus-visible: keyboard-only focus indicators */
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="listbox"]:focus-visible,
+[role="option"]:focus-visible {
+    outline: 2px solid var(--dp-primary);
+    outline-offset: 2px;
+}
+.full-send-btn button:focus-visible {
+    outline: 2px solid var(--dp-white);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 4px rgba(13, 107, 98, 0.30);
+}
+.download-link:focus-visible {
+    outline: 2px solid var(--dp-primary);
+    outline-offset: 2px;
+}
+
 @keyframes rise-in {
     from {
         opacity: 0;
@@ -673,6 +709,33 @@ footer,
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .hero-banner,
+    .panel-card {
+        animation: none;
+    }
+    .download-link {
+        transition: none;
+    }
+}
+@media (min-width: 768px) and (max-width: 979px) {
+    .gradio-container {
+        padding: 14px 14px 20px !important;
+    }
+    .hero-banner {
+        grid-template-columns: 1fr;
+        padding: 18px 20px;
+    }
+    .panel-card {
+        padding: 14px;
+    }
+    .panel-note-strip {
+        grid-template-columns: 1fr 1fr;
+    }
+    .download-card {
+        flex-direction: row;
     }
 }
 @media (max-width: 980px) {
@@ -986,8 +1049,8 @@ class ChatDemo:
                     gr.HTML(
                         """
                         <div class="section-heading">
-                            <span class="section-kicker">Workspace</span>
-                            <h3>任务输入</h3>
+                            <span class="section-kicker" role="doc-subtitle">Workspace</span>
+                            <h2>任务输入</h2>
                         </div>
                         """,
                     )
@@ -1165,8 +1228,8 @@ class ChatDemo:
                     gr.HTML(
                         """
                         <div class="section-heading">
-                            <span class="section-kicker">Output</span>
-                            <h3>结果与预览</h3>
+                            <span class="section-kicker" role="doc-subtitle">Output</span>
+                            <h2>结果与预览</h2>
                             <p>生成完成后，这里会持续显示状态、预览和下载入口。</p>
                         </div>
                         """

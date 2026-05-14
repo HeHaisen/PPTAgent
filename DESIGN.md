@@ -6,7 +6,7 @@ colors:
   surface-warm: "#fffcf6"
   surface-strong: "#fffdf8"
   deep-navy: "#162534"
-  slate-mist: "#5f6e7a"
+  slate-mist: "#4f5e6a"
   quiet-teal: "#0d6b62"
   deep-teal: "#0a554f"
   seafoam: "#e6f5f1"
@@ -146,7 +146,7 @@ The palette is built on a warm beige ground with a deep teal accent. The neutral
 - **Surface Warm** (rgba(255, 252, 246, 0.92) / #fffcf6): Panel and card backgrounds. Translucent, allowing the Warm Linen ground to breathe through. Always paired with backdrop-filter: blur(12px).
 - **Surface Strong** (#fffdf8): The opaque variant of surface. Used where translucency would cause readability issues (status areas, dependency panels).
 - **Deep Navy** (#162534): Primary text color. Dark but not black; the blue undertone keeps it from feeling harsh against Warm Linen.
-- **Slate Mist** (#5f6e7a): Secondary text. Descriptions, captions, muted content. Always readable against Warm Linen at WCAG AA.
+- **Slate Mist** (#4f5e6a): Secondary text. Descriptions, captions, muted content. Darkened for WCAG AA compliance margin on translucent surfaces.
 - **Ink Soft** (#ebf0f4): Light blue-gray for subtle backgrounds (status areas, inactive regions).
 
 ### Accent Soft
