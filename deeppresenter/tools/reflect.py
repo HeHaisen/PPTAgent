@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from bs4 import BeautifulSoup, NavigableString
 from fastmcp import FastMCP
 from mcp.types import ImageContent
 
@@ -55,6 +56,12 @@ _COLOR_RE = re.compile(
 _BG_COLOR_RE = re.compile(
     r"background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))",
     re.IGNORECASE,
+)
+_PAGE_HEADING_RE = re.compile(
+    r"^\s{0,3}#{2,6}\s*"
+    r"(?:(?:第\s*)?(?:\d+|[一二三四五六七八九十百两]+)\s*[页頁]|slide\s*\d+)"
+    r"(?:\s*[:：.．、-].*)?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -143,6 +150,65 @@ def _min_font_rule(selector: str) -> tuple[float, str] | None:
 
     return 18.0, "正文"
 
+
+_TEXT_TAGS = {
+    "a",
+    "b",
+    "code",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "i",
+    "li",
+    "mark",
+    "p",
+    "small",
+    "span",
+    "strong",
+    "sub",
+    "sup",
+}
+_SKIP_TEXT_CHECK_TAGS = {"html", "head", "body", "script", "style", "title", "svg"}
+
+
+def _collect_unwrapped_text_issues(html_text: str) -> list[Issue]:
+    """Detect direct text nodes inside layout/container tags."""
+    soup = BeautifulSoup(html_text, "html.parser")
+    issues: list[Issue] = []
+
+    for tag in soup.find_all(True):
+        tag_name = tag.name.lower()
+        if tag_name in _TEXT_TAGS or tag_name in _SKIP_TEXT_CHECK_TAGS:
+            continue
+
+        direct_text = " ".join(
+            str(child).strip()
+            for child in tag.children
+            if isinstance(child, NavigableString) and str(child).strip()
+        )
+        if not direct_text:
+            continue
+
+        classes = tag.get("class") or []
+        selector = f"<{tag_name}>"
+        if classes:
+            selector += "." + ".".join(classes)
+        preview = direct_text[:50] + ("..." if len(direct_text) > 50 else "")
+        issues.append(Issue(
+            rule_name="unwrapped_text",
+            severity="error",
+            message=(
+                f"{selector} contains unwrapped text `{preview}`. "
+                "All visible text must be wrapped in <p>, <h1>-<h6>, <ul>/<ol>/<li>, or <span>."
+            ),
+            element=selector,
+        ))
+
+    return issues
 
 def _collect_font_size_issues(html_text: str) -> list[Issue]:
     issues: list[Issue] = []
@@ -658,6 +724,18 @@ def inspect_slides_structured(slides: "list[SlidePage]") -> list[Issue]:
     return issues
 
 
+def _format_slide_audit_warning(issues: list[Issue]) -> str:
+    preview = issues[:8]
+    details = "\n".join(f"- [{issue.rule_name}] {issue.message}" for issue in preview)
+    if len(issues) > len(preview):
+        details += f"\n- 另外还有 {len(issues) - len(preview)} 处可读性提醒"
+    return (
+        "Slide readability warnings:\n"
+        f"{details}\n"
+        "这些问题可能降低导出后的阅读体验；请优先通过调整间距、减少重叠或优化布局修复。"
+    )
+
+
 def _format_slide_audit_error(issues: list[Issue]) -> str:
     preview = issues[:8]
     details = "\n".join(f"- [{issue.rule_name}] {issue.message}" for issue in preview)
@@ -689,6 +767,7 @@ async def inspect_slide(
     )
     html_text = html_path.read_text(encoding="utf-8")
     all_issues: list[Issue] = []
+    all_issues.extend(_collect_unwrapped_text_issues(html_text))
     all_issues.extend(_collect_font_size_issues(html_text))
     all_issues.extend(_collect_contrast_issues(html_text))
     all_issues.extend(_collect_overlap_issues(html_text))
@@ -697,6 +776,7 @@ async def inspect_slide(
     all_issues.extend(_collect_overflow_image_issues(html_text))
 
     errors = [i for i in all_issues if i.severity == "error"]
+    warnings = [i for i in all_issues if i.severity == "warning"]
     if errors:
         return _format_slide_audit_error(errors)
 
@@ -711,6 +791,9 @@ async def inspect_slide(
                 "禁止把正文缩到 18px 以下、辅助文字缩到 14px 以下。"
             )
         return message
+
+    if warnings:
+        return _format_slide_audit_warning(warnings)
 
     if REFLECTIVE_DESIGN:
         pdf_path = Path(tempfile.mkdtemp()) / "slide.pdf"
@@ -732,6 +815,27 @@ async def inspect_slide(
         return "This slide is valid."
 
 
+def _split_markdown_pages_by_separator(markdown: str) -> list[str]:
+    return [p for p in re.split(r"\n\s*---\s*\n", markdown) if p.strip()]
+
+
+def _count_markdown_pages(markdown: str) -> tuple[int, str, int, int, list[str]]:
+    separator_count = len(_split_markdown_pages_by_separator(markdown))
+    explicit_count = len(_PAGE_HEADING_RE.findall(markdown))
+    warnings: list[str] = []
+
+    if explicit_count > 0:
+        if separator_count and separator_count != explicit_count:
+            warnings.append(
+                "Detected "
+                f"{explicit_count} explicit page headings but {separator_count} horizontal-rule blocks; "
+                "using explicit page headings for page count."
+            )
+        return explicit_count, "explicit_page_heading", separator_count, explicit_count, warnings
+
+    return separator_count, "horizontal_rule_separator", separator_count, explicit_count, warnings
+
+
 @mcp.tool()
 def inspect_manuscript(md_file: str) -> dict:
     """
@@ -746,12 +850,19 @@ def inspect_manuscript(md_file: str) -> dict:
     with open(md_file, encoding="utf-8") as f:
         markdown = f.read()
 
-    pages = [p for p in markdown.split("\n---\n") if p.strip()]
+    page_count, strategy, separator_count, explicit_count, page_warnings = (
+        _count_markdown_pages(markdown)
+    )
     result = defaultdict(list)
-    result["num_pages"] = len(pages)
+    result["num_pages"] = page_count
+    result["page_count_strategy"] = strategy
+    result["separator_blocks"] = separator_count
+    result["explicit_page_headings"] = explicit_count
+    result["warnings"].extend(page_warnings)
     label = LID_MODEL.predict(markdown[:1000].replace("\n", " "))
     result["language"] = label[0][0].replace("__label__", "")
 
+    image_warning_start = len(result["warnings"])
     seen_images = set()
     for match in re.finditer(r"!\[(.*?)\]\((.*?)\)", markdown):
         label, path = match.group(1), match.group(2)
@@ -779,7 +890,7 @@ def inspect_manuscript(md_file: str) -> dict:
                 f"Image {path} used {count} times in the whole presentation manuscript."
             )
 
-    if len(result["warnings"]) == 0:
+    if len(result["warnings"]) == image_warning_start:
         result["success"].append(
             "Image asset validation passed: all referenced images exist."
         )
