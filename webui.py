@@ -568,7 +568,6 @@ body {
     font-size: 0.86rem;
 }
 .download-kicker {
-    margin-bottom: 4px;
     color: var(--dp-primary-strong);
     font-size: 0.74rem;
     font-weight: 700;
@@ -976,14 +975,8 @@ class ChatDemo:
             if output_path is None or not output_path.exists():
                 return (
                     '<div class="download-card is-empty">'
-                    '<div class="download-copy">'
                     '<span class="download-kicker">Result</span>'
-                    '<strong>结果文件会在这里出现</strong>'
-                    '<p>生成完成后可直接下载 PPTX、PDF 或其他导出文件。</p>'
-                    "</div>"
-                    '<div class="download-actions">'
                     '<span class="download-link disabled">等待生成</span>'
-                    "</div>"
                     "</div>"
                 )
 
