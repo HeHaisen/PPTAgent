@@ -532,46 +532,89 @@ body {
 }
 .download-shell {
     min-width: 0;
+}
+.download-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(13, 107, 98, 0.12);
+    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(230, 245, 241, 0.84));
+}
+.download-card.is-empty {
+    border-style: dashed;
+    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(241, 246, 248, 0.85));
+}
+.download-copy {
+    min-width: 0;
+}
+.download-copy strong,
+.download-copy span,
+.download-copy p {
+    display: block;
+}
+.download-copy strong {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.download-copy p {
+    margin: 3px 0 0 0;
+    color: var(--dp-muted);
+    font-size: 0.86rem;
+}
+.download-kicker {
+    margin-bottom: 4px;
+    color: var(--dp-primary-strong);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.download-actions {
     display: flex;
     align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
     justify-content: flex-end;
 }
-.dl-area {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-}
-.dl-btn {
+.download-link {
     display: inline-flex;
     align-items: center;
-    height: 34px;
+    justify-content: center;
+    min-height: 42px;
     padding: 0 14px;
     border-radius: 999px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    white-space: nowrap;
     text-decoration: none !important;
-    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    font-weight: 700;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
-.dl-btn.disabled {
-    background: var(--dp-ink-soft);
-    color: var(--dp-muted);
-    cursor: default;
-}
-.dl-btn.ready {
+.download-link.primary {
     background: var(--dp-primary);
     color: var(--dp-white) !important;
-    box-shadow: 0 8px 22px rgba(13, 107, 98, 0.25);
-    animation: dl-pulse 0.6s ease-out;
+    box-shadow: 0 12px 28px rgba(13, 107, 98, 0.18);
 }
-.dl-btn.ready:hover {
+.download-link.primary:hover {
     background: var(--dp-primary-strong);
     transform: translateY(-1px);
-    box-shadow: 0 12px 28px rgba(13, 107, 98, 0.30);
 }
-@keyframes dl-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(13, 107, 98, 0.35); }
-    100% { box-shadow: 0 8px 22px rgba(13, 107, 98, 0.25); }
+.download-link.secondary {
+    border: 1px solid rgba(22, 37, 52, 0.12);
+    background: rgba(255, 255, 255, 0.70);
+    color: var(--dp-text) !important;
+}
+.download-link.secondary:hover {
+    background: var(--dp-white);
+    transform: translateY(-1px);
+}
+.download-link.disabled {
+    background: var(--dp-disabled-bg);
+    color: var(--dp-disabled-text) !important;
+    pointer-events: none;
 }
 .dep-check-panel {
     margin-top: 8px;
@@ -653,9 +696,9 @@ select:focus-visible,
     outline-offset: 3px;
     box-shadow: 0 0 0 4px rgba(13, 107, 98, 0.30);
 }
-.dl-btn.ready:focus-visible {
-    outline: 2px solid var(--dp-white);
-    outline-offset: 3px;
+.download-link:focus-visible {
+    outline: 2px solid var(--dp-primary);
+    outline-offset: 2px;
 }
 
 @keyframes rise-in {
@@ -673,9 +716,8 @@ select:focus-visible,
     .panel-card {
         animation: none;
     }
-    .dl-btn {
+    .download-link {
         transition: none;
-        animation: none;
     }
 }
 @media (min-width: 768px) and (max-width: 979px) {
@@ -691,6 +733,9 @@ select:focus-visible,
     }
     .panel-note-strip {
         grid-template-columns: 1fr 1fr;
+    }
+    .download-card {
+        flex-direction: row;
     }
 }
 @media (max-width: 980px) {
@@ -710,9 +755,16 @@ select:focus-visible,
     .result-panel {
         position: static;
     }
-    .result-toolbar {
+    .result-toolbar,
+    .download-card {
         flex-direction: column;
         align-items: stretch;
+    }
+    .download-actions {
+        justify-content: stretch;
+    }
+    .download-link {
+        width: 100%;
     }
     .preview-gallery {
         min-height: var(--dp-preview-height-mobile);
@@ -923,20 +975,33 @@ class ChatDemo:
         def build_download_card_html(output_path: Path | None = None) -> str:
             if output_path is None or not output_path.exists():
                 return (
-                    '<div class="dl-area">'
-                    '<span class="dl-btn disabled">等待生成</span>'
+                    '<div class="download-card is-empty">'
+                    '<div class="download-copy">'
+                    '<span class="download-kicker">Result</span>'
+                    '<strong>结果文件会在这里出现</strong>'
+                    '<p>生成完成后可直接下载 PPTX、PDF 或其他导出文件。</p>'
+                    "</div>"
+                    '<div class="download-actions">'
+                    '<span class="download-link disabled">等待生成</span>'
+                    "</div>"
                     "</div>"
                 )
 
             safe_name = html.escape(output_path.name)
             file_url = f"/gradio_api/file={quote(str(output_path))}"
             meta = f"{output_path.suffix.lower().lstrip('.') or 'file'} · {format_file_size(output_path)}"
-            safe_meta = html.escape(meta)
+            safe_meta = html.escape(meta.upper())
             return (
-                '<div class="dl-area">'
-                f'<a class="dl-btn ready" href="{file_url}" download="{safe_name}" title="{safe_name}">'
-                f"下载 {safe_meta}"
-                "</a>"
+                '<div class="download-card">'
+                '<div class="download-copy">'
+                '<span class="download-kicker">Result</span>'
+                f'<strong title="{safe_name}">{safe_name}</strong>'
+                f"<p>{safe_meta}</p>"
+                "</div>"
+                '<div class="download-actions">'
+                f'<a class="download-link primary" href="{file_url}" download="{safe_name}">下载文件</a>'
+                f'<a class="download-link secondary" href="{file_url}" target="_blank" rel="noopener noreferrer">打开文件</a>'
+                "</div>"
                 "</div>"
             )
 
