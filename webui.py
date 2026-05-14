@@ -207,8 +207,6 @@ gradio_css = """
     --dp-ink-soft: #ebf0f4;
     --dp-warm: #f6e6d3;
     --dp-shadow: 0 20px 60px rgba(16, 33, 47, 0.10);
-    --dp-preview-height-desktop: 700px;
-    --dp-preview-height-mobile: 520px;
     --dp-status-bg: #eef4fb;
     --dp-white: #fffdf8;
     --dp-disabled-bg: #e7edf2;
@@ -634,7 +632,6 @@ body {
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
-    min-height: var(--dp-preview-height-desktop);
     background: rgba(255, 255, 255, 0.76);
 }
 .preview-tabs [role="tablist"] {
@@ -661,7 +658,6 @@ body {
 }
 .pdf-preview-shell {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
@@ -669,7 +665,7 @@ body {
 }
 .pdf-preview-shell iframe {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
+    height: 80vh;
     border: 0;
     display: block;
 }
@@ -764,13 +760,6 @@ select:focus-visible,
     }
     .download-link {
         width: 100%;
-    }
-    .preview-gallery {
-        min-height: var(--dp-preview-height-mobile);
-    }
-    .pdf-preview-shell,
-    .pdf-preview-shell iframe {
-        min-height: var(--dp-preview-height-mobile);
     }
 }
 """
