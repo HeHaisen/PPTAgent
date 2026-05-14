@@ -297,11 +297,14 @@ body {
     color: var(--dp-muted);
     font-size: 0.92rem;
 }
+/* ===== 统一动态高度布局 ===== */
 .main-layout {
+    height: calc(100vh - 220px) !important;
+    min-height: 560px;
     gap: 18px;
     align-items: stretch;
     justify-content: center;
-    overflow: visible !important;
+    overflow: hidden !important;
 }
 .panel-card {
     background: var(--dp-surface);
@@ -312,18 +315,92 @@ body {
     backdrop-filter: blur(12px);
     animation: rise-in 0.35s ease-out both;
     position: relative;
-    overflow: visible !important;
+    overflow: hidden !important;
 }
+/* --- 左侧面板：三段式 flex-col --- */
 .input-panel {
+    display: flex !important;
+    flex-direction: column !important;
     animation-delay: 0.04s;
     z-index: 3;
 }
+.input-panel > .wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+}
+.left-header {
+    flex: 0 0 auto !important;
+}
+.left-header > .wrap {
+    flex: 0 0 auto !important;
+}
+.left-middle {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+.left-middle > .wrap {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 4px;
+}
+.left-middle > .wrap::-webkit-scrollbar {
+    width: 5px;
+}
+.left-middle > .wrap::-webkit-scrollbar-thumb {
+    background: rgba(13,107,98,0.18);
+    border-radius: 3px;
+}
+.left-middle > .wrap > .wrap {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+}
+.left-bottom {
+    flex: 0 0 auto !important;
+}
+.left-bottom > .wrap {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+}
+/* --- 右侧面板：三段式 flex-col --- */
 .result-panel {
+    display: flex !important;
+    flex-direction: column !important;
     animation-delay: 0.08s;
-    position: sticky;
-    top: 12px;
-    align-self: start;
     z-index: 1;
+}
+.result-panel > .wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+}
+/* 右侧：标题和工具栏固定不伸缩，Tabs 区域填满剩余 */
+.result-panel > .wrap > .wrap:nth-child(1),
+.result-panel > .wrap > .wrap:nth-child(2) {
+    flex: 0 0 auto !important;
+}
+.preview-tabs {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.preview-tabs > .wrap {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.preview-tabs [role="tabpanel"] {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
 }
 .section-heading {
     display: flex;
@@ -624,7 +701,8 @@ body {
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
-    min-height: var(--dp-preview-height-desktop);
+    min-height: 400px;
+    height: 100% !important;
     background: rgba(255, 255, 255, 0.76);
 }
 .preview-tabs [role="tablist"] {
@@ -651,7 +729,8 @@ body {
 }
 .pdf-preview-shell {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
+    min-height: 400px;
+    height: 100%;
     border: 1px solid var(--dp-border);
     border-radius: 18px;
     overflow: hidden;
@@ -659,7 +738,8 @@ body {
 }
 .pdf-preview-shell iframe {
     width: 100%;
-    min-height: var(--dp-preview-height-desktop);
+    height: 100%;
+    min-height: 400px;
     border: 0;
     display: block;
 }
@@ -685,14 +765,22 @@ footer,
         grid-template-columns: 1fr;
         padding: 18px;
     }
+    .main-layout {
+        height: auto !important;
+        min-height: 0 !important;
+    }
     .panel-card {
         padding: 12px;
     }
+    .input-panel,
+    .result-panel {
+        min-height: 50vh;
+    }
+    .left-middle > .wrap {
+        overflow-y: visible !important;
+    }
     .panel-note-strip {
         grid-template-columns: 1fr;
-    }
-    .result-panel {
-        position: static;
     }
     .result-toolbar,
     .download-card {
@@ -979,186 +1067,184 @@ class ChatDemo:
             )
 
             with gr.Row(elem_classes=["main-layout"]):
-                # [重构] 左侧比例从 6 改为 3，压缩输入区宽度
+                # [重构] 左侧比例 3，三段式布局：header / middle(可滚动) / bottom(固定)
                 with gr.Column(
                     scale=3,
                     min_width=420,
                     elem_classes=["panel-card", "input-panel"],
                 ):
-                    gr.HTML(
-                        """
-                        <div class="section-heading">
-                            <span class="section-kicker">Workspace</span>
-                            <h3>任务输入</h3>
-                        </div>
-                        """,
-                    )
-
-                    # [重构] 提示卡片移入折叠面板，减少常驻视觉空间
-                    with gr.Accordion("💡 功能提示", open=False):
+                    # --- 固定头部：标题 + 功能提示 ---
+                    with gr.Column(elem_classes=["left-header"], min_width=0):
                         gr.HTML(
                             """
-                            <div class="panel-note" style="margin:0">
-                                <div class="panel-note-strip" style="grid-template-columns:1fr">
-                                    <div class="note-chip" style="padding:8px 10px">
-                                        <strong style="font-size:0.85rem">页数控制</strong>
-                                        <span style="font-size:0.80rem">可指定固定页数，也可以让系统自动判断。</span>
-                                    </div>
-                                    <div class="note-chip" style="padding:8px 10px">
-                                        <strong style="font-size:0.85rem">模板工作流</strong>
-                                        <span style="font-size:0.80rem">上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
-                                    </div>
-                                    <div class="note-chip" style="padding:8px 10px">
-                                        <strong style="font-size:0.85rem">附件材料</strong>
-                                        <span style="font-size:0.80rem">PDF、文档和图片会被解析为内容素材参与生成。</span>
-                                    </div>
-                                </div>
+                            <div class="section-heading">
+                                <span class="section-kicker">Workspace</span>
+                                <h3>任务输入</h3>
                             </div>
                             """,
                         )
+                        with gr.Accordion("💡 功能提示", open=False):
+                            gr.HTML(
+                                """
+                                <div class="panel-note" style="margin:0">
+                                    <div class="panel-note-strip" style="grid-template-columns:1fr">
+                                        <div class="note-chip" style="padding:8px 10px">
+                                            <strong style="font-size:0.85rem">页数控制</strong>
+                                            <span style="font-size:0.80rem">可指定固定页数，也可以让系统自动判断。</span>
+                                        </div>
+                                        <div class="note-chip" style="padding:8px 10px">
+                                            <strong style="font-size:0.85rem">模板工作流</strong>
+                                            <span style="font-size:0.80rem">上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
+                                        </div>
+                                        <div class="note-chip" style="padding:8px 10px">
+                                            <strong style="font-size:0.85rem">附件材料</strong>
+                                            <span style="font-size:0.80rem">PDF、文档和图片会被解析为内容素材参与生成。</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                """,
+                            )
 
-                    # [重构] 基础设置区：项目设定 + 模板 + 联网搜索
-                    with gr.Group(elem_classes=["control-shell"]):
-                        gr.HTML(
-                            """
-                            <div class="subsection-title">
-                                <strong>项目设定</strong>
-                                <span>定义生成模式、页数规模和模板来源。</span>
-                            </div>
-                            """
-                        )
-                        with gr.Row(elem_classes=["field-grid"]):
-                            pages_dd = gr.Dropdown(
-                                label="幻灯片页数 (#pages)",
-                                choices=["auto"] + [str(i) for i in range(1, 31)],
-                                value="auto",
-                                scale=1,
+                    # --- 可滚动中间区：项目设定 + 高级设置 + 历史会话 ---
+                    with gr.Column(elem_classes=["left-middle"], min_width=0):
+                        with gr.Group(elem_classes=["control-shell"]):
+                            gr.HTML(
+                                """
+                                <div class="subsection-title">
+                                    <strong>项目设定</strong>
+                                    <span>定义生成模式、页数规模和模板来源。</span>
+                                </div>
+                                """
                             )
-                            convert_type_dd = gr.Dropdown(
-                                label="输出类型 (output type)",
-                                choices=list(CONVERT_MAPPING),
-                                value=list(CONVERT_MAPPING)[0],
-                                scale=1,
+                            with gr.Row(elem_classes=["field-grid"]):
+                                pages_dd = gr.Dropdown(
+                                    label="幻灯片页数 (#pages)",
+                                    choices=["auto"] + [str(i) for i in range(1, 31)],
+                                    value="auto",
+                                    scale=1,
+                                )
+                                convert_type_dd = gr.Dropdown(
+                                    label="输出类型 (output type)",
+                                    choices=list(CONVERT_MAPPING),
+                                    value=list(CONVERT_MAPPING)[0],
+                                    scale=1,
+                                )
+                            with gr.Row(
+                                elem_classes=["field-row-tight", "template-row"],
+                            ) as template_row:
+                                template_choices = PPTAgentServer.list_templates()
+                                template_dd = gr.Radio(
+                                    label="选择模板 (template)",
+                                    choices=["auto"] + template_choices,
+                                    value="auto",
+                                    info="仅在模板模式下生效；自由生成模式下会忽略此项。",
+                                    interactive=True,
+                                    elem_classes=["template-dropdown"],
+                                )
+                            enable_search_cb = gr.Checkbox(
+                                label="开启联网搜索",
+                                value=True,
+                                info="关闭后仅使用附件和本地工作区材料，不再调用网页、图片或论文搜索。",
+                                elem_classes=["search-toggle-wrap"],
                             )
-                        with gr.Row(
-                            elem_classes=["field-row-tight", "template-row"],
-                        ) as template_row:
-                            template_choices = PPTAgentServer.list_templates()
-                            template_dd = gr.Radio(
-                                label="选择模板 (template)",
-                                choices=["auto"] + template_choices,
-                                value="auto",
-                                info="仅在模板模式下生效；自由生成模式下会忽略此项。",
-                                interactive=True,
-                                elem_classes=["template-dropdown"],
+                            custom_template_input = gr.File(
+                                label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
+                                file_count="single",
+                                file_types=[".pptx"],
+                                type="filepath",
+                                visible=False,
                             )
-                        enable_search_cb = gr.Checkbox(
-                            label="开启联网搜索",
-                            value=True,
-                            info="关闭后仅使用附件和本地工作区材料，不再调用网页、图片或论文搜索。",
-                            elem_classes=["search-toggle-wrap"],
-                        )
-                        custom_template_input = gr.File(
-                            label="上传自定义模板 (.pptx，可选，按原模板直接编辑)",
-                            file_count="single",
-                            file_types=[".pptx"],
-                            type="filepath",
-                            visible=False,
-                        )
+                        with gr.Accordion("⚙️ 高级设置", open=False):
+                            workspace_input = gr.Textbox(
+                                label="工作区路径 (workspace)",
+                                value="",
+                                placeholder=f"留空使用默认路径 ({WORKSPACE_BASE})",
+                                info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
+                            )
+                        with gr.Accordion("📜 历史会话", open=False):
+                            session_dd = gr.Dropdown(
+                                label="选择会话",
+                                choices=[],
+                                value=None,
+                                info="选择一个历史会话加载",
+                            )
+                            with gr.Row():
+                                refresh_sessions_btn = gr.Button(
+                                    "刷新列表", size="sm", scale=1
+                                )
+                                load_session_btn = gr.Button(
+                                    "加载选中会话",
+                                    size="sm",
+                                    variant="primary",
+                                    scale=1,
+                                    interactive=False,
+                                )
+                            with gr.Row():
+                                resume_btn = gr.Button(
+                                    "▶ 继续生成",
+                                    size="sm",
+                                    variant="primary",
+                                    scale=1,
+                                    interactive=False,
+                                    visible=True,
+                                )
+                                delete_progress_btn = gr.Button(
+                                    "🗑 删除进度",
+                                    size="sm",
+                                    variant="stop",
+                                    scale=1,
+                                    interactive=False,
+                                    visible=True,
+                                )
 
-                    # [重构] 高级设置折叠：工作区路径
-                    with gr.Accordion("⚙️ 高级设置", open=False):
-                        workspace_input = gr.Textbox(
-                            label="工作区路径 (workspace)",
-                            value="",
-                            placeholder=f"留空使用默认路径 ({WORKSPACE_BASE})",
-                            info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
-                        )
-
-                    # [重构] 历史会话
-                    with gr.Accordion("📜 历史会话", open=False):
-                        session_dd = gr.Dropdown(
-                            label="选择会话",
-                            choices=[],
-                            value=None,
-                            info="选择一个历史会话加载",
-                        )
-                        with gr.Row():
-                            refresh_sessions_btn = gr.Button(
-                                "刷新列表", size="sm", scale=1
+                    # --- 固定底部：附件 + 指令 + 操作按钮（不随滚动消失）---
+                    with gr.Column(elem_classes=["left-bottom"], min_width=0):
+                        with gr.Group(elem_classes=["composer-shell"]):
+                            gr.HTML(
+                                """
+                                <div class="subsection-title">
+                                    <strong>附件与需求</strong>
+                                    <span>上传素材并描述目标，生成质量会更稳定。</span>
+                                </div>
+                                """
                             )
-                            load_session_btn = gr.Button(
-                                "加载选中会话",
-                                size="sm",
+                            attachments_input = gr.File(
+                                label="附件 (可多选)",
+                                file_count="multiple",
+                                type="filepath",
+                            )
+                            msg_input = gr.Textbox(
+                                label="指令",
+                                placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World\n或：修改第 5 页，增加数据图表",
+                                lines=3,
+                                max_lines=6,
+                            )
+                            send_btn = gr.Button(
+                                "生成并刷新预览",
                                 variant="primary",
-                                scale=1,
-                                interactive=False,
+                                elem_classes=["full-send-btn"],
                             )
-                        with gr.Row():
-                            resume_btn = gr.Button(
-                                "▶ 继续生成",
-                                size="sm",
-                                variant="primary",
-                                scale=1,
-                                interactive=False,
-                                visible=True,
-                            )
-                            delete_progress_btn = gr.Button(
-                                "🗑 删除进度",
-                                size="sm",
+                            cancel_btn = gr.Button(
+                                "停止生成",
                                 variant="stop",
-                                scale=1,
-                                interactive=False,
                                 visible=True,
                             )
-
-                    # [重构] 核心输入区：附件上传 + 需求描述紧凑排列，按钮固定底部
-                    with gr.Group(elem_classes=["composer-shell"]):
-                        gr.HTML(
+                            loop_state = gr.State(None)
+                            # JavaScript to persist session_id in cookie for reconnection
+                            session_cookie_js = """
+                            <script>
+                            (function() {
+                                var match = document.cookie.match(/dp_session_id=([^;]+)/);
+                                if (!match) {
+                                    var sid = Date.now().toString(36) + Math.random().toString(36).slice(2);
+                                    document.cookie = 'dp_session_id=' + sid + ';path=/;max-age=7200';
+                                }
+                            })();
+                            </script>
                             """
-                            <div class="subsection-title">
-                                <strong>附件与需求</strong>
-                                <span>上传素材并描述目标，生成质量会更稳定。</span>
-                            </div>
-                            """
-                        )
-                        attachments_input = gr.File(
-                            label="附件 (可多选)",
-                            file_count="multiple",
-                            type="filepath",
-                        )
-                        msg_input = gr.Textbox(
-                            label="指令",
-                            placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World\n或：修改第 5 页，增加数据图表",
-                            lines=3,
-                            max_lines=6,
-                        )
-                        send_btn = gr.Button(
-                            "生成并刷新预览",
-                            variant="primary",
-                            elem_classes=["full-send-btn"],
-                        )
-                        cancel_btn = gr.Button(
-                            "停止生成",
-                            variant="stop",
-                            visible=True,
-                        )
-                        loop_state = gr.State(None)
-                        # JavaScript to persist session_id in cookie for reconnection
-                        session_cookie_js = """
-                        <script>
-                        (function() {
-                            var match = document.cookie.match(/dp_session_id=([^;]+)/);
-                            if (!match) {
-                                var sid = Date.now().toString(36) + Math.random().toString(36).slice(2);
-                                document.cookie = 'dp_session_id=' + sid + ';path=/;max-age=7200';
-                            }
-                        })();
-                        </script>
-                        """
-                        session_cookie = gr.HTML(value=session_cookie_js, visible=False)
+                            session_cookie = gr.HTML(value=session_cookie_js, visible=False)
 
-                # [重构] 右侧比例从 4 改为 7，占据主要视觉焦点
+                # [重构] 右侧比例 7，占据主要视觉焦点
                 with gr.Column(
                     scale=7,
                     min_width=600,
