@@ -320,9 +320,7 @@ body {
 }
 .result-panel {
     animation-delay: 0.08s;
-    position: sticky;
-    top: 12px;
-    align-self: start;
+    align-self: stretch;
     z-index: 1;
 }
 .section-heading {
