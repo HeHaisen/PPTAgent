@@ -375,8 +375,7 @@ body {
     line-height: 1.5;
 }
 .control-shell,
-.composer-shell,
-.log-shell {
+.composer-shell {
     border: 1px solid var(--dp-border);
     border-radius: 20px;
     padding: 14px;
@@ -980,9 +979,10 @@ class ChatDemo:
             )
 
             with gr.Row(elem_classes=["main-layout"]):
+                # [重构] 左侧比例从 6 改为 3，压缩输入区宽度
                 with gr.Column(
-                    scale=6,
-                    min_width=760,
+                    scale=3,
+                    min_width=420,
                     elem_classes=["panel-card", "input-panel"],
                 ):
                     gr.HTML(
@@ -990,31 +990,34 @@ class ChatDemo:
                         <div class="section-heading">
                             <span class="section-kicker">Workspace</span>
                             <h3>任务输入</h3>
-                            <p>先配置模式、页数和模板，再补充附件与目标描述。</p>
-                        </div>
-                        """,
-                    )
-                    gr.HTML(
-                        """
-                        <div class="panel-note">
-                            <div class="panel-note-strip">
-                                <div class="note-chip">
-                                    <strong>页数控制</strong>
-                                    <span>可指定固定页数，也可以让系统自动判断。</span>
-                                </div>
-                                <div class="note-chip">
-                                    <strong>模板工作流</strong>
-                                    <span>上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
-                                </div>
-                                <div class="note-chip">
-                                    <strong>附件材料</strong>
-                                    <span>PDF、文档和图片会被解析为内容素材参与生成。</span>
-                                </div>
-                            </div>
                         </div>
                         """,
                     )
 
+                    # [重构] 提示卡片移入折叠面板，减少常驻视觉空间
+                    with gr.Accordion("💡 功能提示", open=False):
+                        gr.HTML(
+                            """
+                            <div class="panel-note" style="margin:0">
+                                <div class="panel-note-strip" style="grid-template-columns:1fr">
+                                    <div class="note-chip" style="padding:8px 10px">
+                                        <strong style="font-size:0.85rem">页数控制</strong>
+                                        <span style="font-size:0.80rem">可指定固定页数，也可以让系统自动判断。</span>
+                                    </div>
+                                    <div class="note-chip" style="padding:8px 10px">
+                                        <strong style="font-size:0.85rem">模板工作流</strong>
+                                        <span style="font-size:0.80rem">上传自定义 PPT 后，会优先在原模板上直接编辑。</span>
+                                    </div>
+                                    <div class="note-chip" style="padding:8px 10px">
+                                        <strong style="font-size:0.85rem">附件材料</strong>
+                                        <span style="font-size:0.80rem">PDF、文档和图片会被解析为内容素材参与生成。</span>
+                                    </div>
+                                </div>
+                            </div>
+                            """,
+                        )
+
+                    # [重构] 基础设置区：项目设定 + 模板 + 联网搜索
                     with gr.Group(elem_classes=["control-shell"]):
                         gr.HTML(
                             """
@@ -1062,12 +1065,9 @@ class ChatDemo:
                             type="filepath",
                             visible=False,
                         )
-                        attachments_input = gr.File(
-                            label="附件 (可多选)",
-                            file_count="multiple",
-                            type="filepath",
-                            elem_classes=["file-container"],
-                        )
+
+                    # [重构] 高级设置折叠：工作区路径
+                    with gr.Accordion("⚙️ 高级设置", open=False):
                         workspace_input = gr.Textbox(
                             label="工作区路径 (workspace)",
                             value="",
@@ -1075,6 +1075,7 @@ class ChatDemo:
                             info="自定义生成文件的存储目录，留空则使用环境变量 DEEPPRESENTER_WORKSPACE_BASE 或默认 /tmp",
                         )
 
+                    # [重构] 历史会话
                     with gr.Accordion("📜 历史会话", open=False):
                         session_dd = gr.Dropdown(
                             label="选择会话",
@@ -1111,20 +1112,26 @@ class ChatDemo:
                                 visible=True,
                             )
 
+                    # [重构] 核心输入区：附件上传 + 需求描述紧凑排列，按钮固定底部
                     with gr.Group(elem_classes=["composer-shell"]):
                         gr.HTML(
                             """
                             <div class="subsection-title">
-                                <strong>需求描述</strong>
-                                <span>明确受众、目标和内容重点，生成质量会更稳定。</span>
+                                <strong>附件与需求</strong>
+                                <span>上传素材并描述目标，生成质量会更稳定。</span>
                             </div>
                             """
+                        )
+                        attachments_input = gr.File(
+                            label="附件 (可多选)",
+                            file_count="multiple",
+                            type="filepath",
                         )
                         msg_input = gr.Textbox(
                             label="指令",
                             placeholder="例如：生成一份 8 页的项目路演 PPT\n或：把第 3 页的标题改成 Hello World\n或：修改第 5 页，增加数据图表",
-                            lines=4,
-                            max_lines=8,
+                            lines=3,
+                            max_lines=6,
                         )
                         send_btn = gr.Button(
                             "生成并刷新预览",
@@ -1151,47 +1158,10 @@ class ChatDemo:
                         """
                         session_cookie = gr.HTML(value=session_cookie_js, visible=False)
 
-                    with gr.Accordion("📊 Token 使用统计", open=False):
-                        token_display = gr.Markdown(
-                            value="暂无数据",
-                            elem_classes=["token-display"],
-                        )
-
-                    with gr.Group(elem_classes=["log-shell"]):
-                        gr.HTML(
-                            """
-                            <div class="subsection-title chat-shell">
-                                <strong>执行轨迹</strong>
-                                <span>显示代理消息、工具调用和生成过程，便于排查问题。</span>
-                            </div>
-                            """
-                        )
-                        chatbot = gr.Chatbot(
-                            value=[],
-                            height=560,
-                            show_label=False,
-                            type="messages",
-                            render_markdown=True,
-                            elem_classes=["chat-container"],
-                        )
-                        with gr.Accordion("📋 系统日志", open=False):
-                            log_display = gr.Code(
-                                value="",
-                                language=None,
-                                label="",
-                                lines=12,
-                                interactive=False,
-                                elem_classes=["log-code-block"],
-                            )
-                            log_refresh_btn = gr.Button(
-                                "刷新日志",
-                                size="sm",
-                                variant="secondary",
-                            )
-
+                # [重构] 右侧比例从 4 改为 7，占据主要视觉焦点
                 with gr.Column(
-                    scale=4,
-                    min_width=460,
+                    scale=7,
+                    min_width=600,
                     elem_classes=["panel-card", "result-panel"],
                 ):
                     gr.HTML(
@@ -1214,13 +1184,13 @@ class ChatDemo:
                                 value=build_download_card_html(),
                                 elem_classes=["download-shell"],
                             )
+                    # [重构] 右侧 Tabs：新增"执行日志与轨迹"Tab，从左侧迁入
                     with gr.Tabs(elem_classes=["preview-tabs"]):
                         with gr.Tab("幻灯片预览"):
                             preview_gallery = gr.Gallery(
                                 value=[],
                                 label="PPT 页面预览",
                                 columns=1,
-                                height=700,
                                 object_fit="contain",
                                 visible=False,
                                 elem_classes=["preview-gallery"],
@@ -1230,6 +1200,34 @@ class ChatDemo:
                                 value="",
                                 visible=False,
                             )
+                        # [重构] 从左侧迁入：Token统计、执行轨迹、系统日志
+                        with gr.Tab("执行日志与轨迹"):
+                            token_display = gr.Markdown(
+                                value="暂无数据",
+                                elem_classes=["token-display"],
+                            )
+                            chatbot = gr.Chatbot(
+                                value=[],
+                                height=500,
+                                show_label=False,
+                                type="messages",
+                                render_markdown=True,
+                                elem_classes=["chat-container"],
+                            )
+                            with gr.Accordion("📋 系统日志", open=False):
+                                log_display = gr.Code(
+                                    value="",
+                                    language=None,
+                                    label="",
+                                    lines=10,
+                                    interactive=False,
+                                    elem_classes=["log-code-block"],
+                                )
+                                log_refresh_btn = gr.Button(
+                                    "刷新日志",
+                                    size="sm",
+                                    variant="secondary",
+                                )
 
             def _toggle_template_visibility(v: str):
                 show_template = "模版" in v
